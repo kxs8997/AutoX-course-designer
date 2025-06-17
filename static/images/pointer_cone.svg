@@ -1,0 +1,8 @@
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <path d="M12 2L4 22h16L12 2z" fill="#FF7F50"/>
+  <path d="M5 21h14v2H5v-2z" fill="#666"/>
+  <path d="M12 2L6 20h12L12 2z" fill="#FF6347"/>
+  <!-- Arrow on top -->
+  <path d="M12 1.5 L10 5 L14 5 L12 1.5 Z" fill="#FFFFFF"/>
+  <path d="M12 4 L12 8" stroke="#FFFFFF" stroke-width="1.5"/>
+</svg>

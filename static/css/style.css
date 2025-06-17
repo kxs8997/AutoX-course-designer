@@ -1,0 +1,63 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: sans-serif;
+    overflow: hidden; /* Prevent scrollbars */
+}
+
+#sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 250px;
+    height: 100%;
+    background: rgba(244, 244, 244, 0.9);
+    padding: 15px;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    z-index: 1000; /* Ensure sidebar is on top of the map */
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto; /* Allow scrolling within the sidebar */
+}
+
+#sidebar h2, #sidebar h3 {
+    margin-top: 0;
+}
+
+.control-group {
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 15px;
+}
+
+.control-group:last-child {
+    border-bottom: none;
+}
+
+#sidebar input[type="text"] {
+    width: calc(100% - 10px);
+    padding: 5px;
+}
+
+#sidebar button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    cursor: pointer;
+}
+
+#sidebar label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+#map {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    z-index: 1; /* Ensure map is behind the sidebar */
+}

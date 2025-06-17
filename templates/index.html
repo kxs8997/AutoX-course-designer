@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autocross Course Editor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    <script src="{{ url_for('static', filename='js/leaflet.rotatedMarker.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Controls</h2>
+        <div class="control-group">
+            <h3>Venue Setup</h3>
+            <input type="text" id="venue-search" placeholder="Search for a venue...">
+            <button id="venue-search-btn">Go</button>
+        </div>
+        <div class="control-group">
+            <h3>Place Cones</h3>
+            <p>Select the type of cone to place:</p>
+            <label><input type="radio" name="coneType" value="regular_cone" checked> Regular Cone</label><br>
+            <label><input type="radio" name="coneType" value="laid_down_cone"> Laid Down Cone</label><br>
+        </div>
+        <div class="control-group">
+            <h3>Tools</h3>
+            <label><input type="checkbox" id="snap-to-grid-checkbox"> Snap to Grid</label><br>
+            <label for="gridSize">Grid Size (feet):</label>
+            <input type="number" id="gridSize" value="10" min="1"><br>
+            <label for="gridRotation">Grid Rotation (degrees): <span id="gridRotationValue">0</span>&deg;</label><br>
+            <input type="range" id="gridRotation" value="0" min="-180" max="180" step="1"><br>
+            <button id="measure-btn" style="margin-top: 10px;">Measure Distance</button>
+            <div id="measurement-results" style="margin-top: 10px; display: none;">
+                <p>Last measure: <span id="measurement-value">0.0</span> ft</p>
+            </div>
+        </div>
+        <div class="control-group">
+            <h3>Actions</h3>
+            <button id="undo-btn">Undo</button>
+            <button id="clear-btn">Clear All</button>
+        </div>
+        <div class="control-group">
+            <h3>Export</h3>
+            <button id="export-json-btn">Export JSON</button>
+            <button id="import-json-btn">Import JSON</button>
+        </div>
+        <div class="control-group" id="selectedConeTools" style="display: none;">
+            <h3>Selected Cone</h3>
+            <label for="coneRotationSlider">Rotation: <span id="selectedConeRotationValueDisplay">0</span>&deg;</label><br>
+            <input type="range" id="coneRotationSlider" value="0" min="0" max="359" step="1"><br>
+        </div>
+        <div class="control-group">
+            <h3>Stats</h3>
+            <p>Cones: <span id="cone-count">0</span></p>
+            <p>Path Length: <span id="path-length">0.0</span> ft</p>
+        </div>
+    </div>
+    <div id="map"></div>
+
+</body>
+</html>
