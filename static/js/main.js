@@ -28,6 +28,13 @@ document.addEventListener('DOMContentLoaded', function () {
     let measureStartPoint = null;
     let tempMeasureLine = null;
 
+    // Clipboard variables for copy-paste functionality
+    let clipboardCones = []; // To store copied cones with relative positions
+    let clipboardReferencePoint = null; // Reference point for paste positioning
+    let pastePreviewMarkers = []; // Markers showing preview of where cones will be pasted
+    let pastePreviewRotationAngle = 0; // Angle for rotation preview of pasted cones
+    let isPastePreviewing = false; // Flag to track if paste preview is active
+
     const coneIcon = L.icon({
         iconUrl: '/static/images/circle_cone.svg',
         iconSize: [25, 25],
@@ -465,6 +472,44 @@ document.addEventListener('DOMContentLoaded', function () {
         selectedCones = [];
     }
     
+    function copyCones() {
+        if (selectedCones.length === 0) return;
+        
+        // Calculate centroid of selected cones to use as a reference point
+        const totalLat = selectedCones.reduce((sum, cone) => sum + cone.data.latlng.lat, 0);
+        const totalLng = selectedCones.reduce((sum, cone) => sum + cone.data.latlng.lng, 0);
+        const centroidLat = totalLat / selectedCones.length;
+        const centroidLng = totalLng / selectedCones.length;
+        clipboardReferencePoint = L.latLng(centroidLat, centroidLng);
+        
+        // Store cones with relative positions to the centroid
+        clipboardCones = selectedCones.map(cone => {
+            // Calculate relative positions in meters
+            const relativePosMeters = {
+                x: calculateDistanceInMeters(clipboardReferencePoint.lng, clipboardReferencePoint.lat, 
+                                              cone.data.latlng.lng, clipboardReferencePoint.lat),
+                y: calculateDistanceInMeters(clipboardReferencePoint.lng, clipboardReferencePoint.lat, 
+                                              clipboardReferencePoint.lng, cone.data.latlng.lat)
+            };
+            
+            // Adjust sign based on position relative to centroid
+            if (cone.data.latlng.lng < clipboardReferencePoint.lng) relativePosMeters.x *= -1;
+            if (cone.data.latlng.lat < clipboardReferencePoint.lat) relativePosMeters.y *= -1;
+            
+            return {
+                relativePosMeters: relativePosMeters,
+                type: cone.data.type,
+                angle: cone.data.angle || 0
+            };
+        });
+        
+        console.log(`Copied ${clipboardCones.length} cones to clipboard`);
+    }
+
+    function calculateDistanceInMeters(lng1, lat1, lng2, lat2) {
+        return L.latLng(lat1, lng1).distanceTo(L.latLng(lat2, lng2));
+    }
+
     function showContextMenu(e, marker, coneData) {
         // Clear existing menu items
         contextMenu.innerHTML = '';
@@ -482,6 +527,19 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Add 'Reset Rotation' option for all cone types since all can be rotated now
         options.push({ text: 'Reset Rotation', action: function() { resetConeRotation(marker, coneData); }});
+        
+        // Add 'Copy Selected Cones' option if in multi-select mode and there are selected cones
+        const isSelectionMode = selectionModeCheckbox.checked;
+        if (isSelectionMode && selectedCones.length > 0) {
+            options.push({ text: 'Copy Selected Cones', action: function() { copyCones(); }});
+        }
+        
+        // Add 'Paste here' option if clipboard has cones
+        if (clipboardCones.length > 0) {
+            options.push({ text: 'Paste here', action: function() { 
+                startPastePreview(coneData.marker.getLatLng()); 
+            }});
+        }
         
         // Create the menu items
         options.forEach(option => {
@@ -675,6 +733,282 @@ document.addEventListener('DOMContentLoaded', function () {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    });
+    
+    // Create a UI for paste rotation controls
+    const pasteRotationControlsDiv = document.createElement('div');
+    pasteRotationControlsDiv.id = 'paste-rotation-controls';
+    pasteRotationControlsDiv.style.position = 'absolute';
+    pasteRotationControlsDiv.style.bottom = '10px';
+    pasteRotationControlsDiv.style.left = '50%';
+    pasteRotationControlsDiv.style.transform = 'translateX(-50%)';
+    pasteRotationControlsDiv.style.backgroundColor = 'white';
+    pasteRotationControlsDiv.style.padding = '10px';
+    pasteRotationControlsDiv.style.borderRadius = '5px';
+    pasteRotationControlsDiv.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.3)';
+    pasteRotationControlsDiv.style.zIndex = '1000';
+    pasteRotationControlsDiv.style.display = 'none';
+    document.body.appendChild(pasteRotationControlsDiv);
+    
+    const pasteRotationLabel = document.createElement('label');
+    pasteRotationLabel.textContent = 'Rotation: ';
+    pasteRotationControlsDiv.appendChild(pasteRotationLabel);
+    
+    const pasteRotationValueDisplay = document.createElement('span');
+    pasteRotationValueDisplay.id = 'paste-rotation-value';
+    pasteRotationValueDisplay.textContent = '0';
+    pasteRotationControlsDiv.appendChild(pasteRotationValueDisplay);
+    
+    const pasteRotationSlider = document.createElement('input');
+    pasteRotationSlider.type = 'range';
+    pasteRotationSlider.min = '-180';
+    pasteRotationSlider.max = '180';
+    pasteRotationSlider.value = '0';
+    pasteRotationSlider.id = 'paste-rotation';
+    pasteRotationSlider.style.width = '200px';
+    pasteRotationSlider.style.margin = '0 10px';
+    pasteRotationControlsDiv.appendChild(pasteRotationSlider);
+    
+    const confirmPasteBtn = document.createElement('button');
+    confirmPasteBtn.textContent = 'Confirm Paste';
+    confirmPasteBtn.style.marginLeft = '10px';
+    confirmPasteBtn.style.backgroundColor = '#4CAF50';
+    confirmPasteBtn.style.color = 'white';
+    confirmPasteBtn.style.border = 'none';
+    confirmPasteBtn.style.padding = '5px 10px';
+    confirmPasteBtn.style.borderRadius = '3px';
+    confirmPasteBtn.style.cursor = 'pointer';
+    pasteRotationControlsDiv.appendChild(confirmPasteBtn);
+    
+    const cancelPasteBtn = document.createElement('button');
+    cancelPasteBtn.textContent = 'Cancel';
+    cancelPasteBtn.style.marginLeft = '10px';
+    cancelPasteBtn.style.backgroundColor = '#f44336';
+    cancelPasteBtn.style.color = 'white';
+    cancelPasteBtn.style.border = 'none';
+    cancelPasteBtn.style.padding = '5px 10px';
+    cancelPasteBtn.style.borderRadius = '3px';
+    cancelPasteBtn.style.cursor = 'pointer';
+    pasteRotationControlsDiv.appendChild(cancelPasteBtn);
+    
+    // Function to handle rotation of points around an origin
+    function rotatePointAroundOrigin(point, origin, angleRadians) {
+        // Convert to Cartesian coordinates relative to origin
+        const xDiff = point.x - origin.x;
+        const yDiff = point.y - origin.y;
+        
+        // Rotate the point
+        const rotatedX = xDiff * Math.cos(angleRadians) - yDiff * Math.sin(angleRadians);
+        const rotatedY = xDiff * Math.sin(angleRadians) + yDiff * Math.cos(angleRadians);
+        
+        // Convert back to absolute coordinates
+        return {
+            x: origin.x + rotatedX,
+            y: origin.y + rotatedY
+        };
+    }
+    
+    // Function to convert relative position in meters to LatLng
+    function relativePositionToLatLng(referencePoint, relativeX, relativeY) {
+        // Constants for coordinate conversions
+        const degPerMeterLat = 1 / 111111;
+        const degPerMeterLng = 1 / (111111 * Math.cos(referencePoint.lat * Math.PI / 180));
+        
+        // Convert relative meters to coordinates
+        const lat = referencePoint.lat + (relativeY * degPerMeterLat);
+        const lng = referencePoint.lng + (relativeX * degPerMeterLng);
+        
+        return L.latLng(lat, lng);
+    }
+    
+    // Function to start the paste preview
+    function startPastePreview(pasteLocation) {
+        // If already in preview mode, clear previous preview markers
+        if (isPastePreviewing) {
+            clearPastePreview();
+        }
+        
+        // Update state
+        isPastePreviewing = true;
+        clipboardReferencePoint = pasteLocation;
+        pastePreviewRotationAngle = 0;
+        
+        // Reset the rotation slider
+        pasteRotationSlider.value = 0;
+        pasteRotationValueDisplay.textContent = '0';
+        
+        // Create preview markers for each cone in the clipboard
+        updatePastePreviewMarkers();
+        
+        // Show rotation controls
+        pasteRotationControlsDiv.style.display = 'block';
+    }
+    
+    // Function to update paste preview markers based on current rotation
+    function updatePastePreviewMarkers() {
+        // Clear existing preview markers
+        clearPastePreviewMarkers();
+        
+        // Angle in radians
+        const angleRadians = (pastePreviewRotationAngle * Math.PI) / 180;
+        
+        // Create new preview markers for each cone in clipboard
+        clipboardCones.forEach(clipboardCone => {
+            const relPos = clipboardCone.relativePosMeters;
+            
+            // Apply rotation to the relative position
+            const rotatedPos = rotatePointAroundOrigin(
+                { x: relPos.x, y: relPos.y },
+                { x: 0, y: 0 },
+                angleRadians
+            );
+            
+            // Convert rotated relative position to map coordinates
+            const newLatLng = relativePositionToLatLng(
+                clipboardReferencePoint, 
+                rotatedPos.x, 
+                rotatedPos.y
+            );
+            
+            // Create a preview marker with appropriate icon
+            const icon = clipboardCone.type === 'regular_cone' ? coneIcon : laidDownConeIcon;
+            const previewMarker = L.marker(newLatLng, {
+                icon: icon,
+                draggable: false,
+                rotationAngle: clipboardCone.angle,
+                rotationOrigin: 'center center'
+            });
+            
+            // Style the preview marker to indicate it's a preview
+            previewMarker.on('add', function(e) {
+                if (this._icon) {
+                    this._icon.style.opacity = '0.6';
+                    this._icon.style.border = '1px dashed #0078FF';
+                }
+            });
+            
+            // Add marker to map and to tracking array
+            previewMarker.addTo(map);
+            pastePreviewMarkers.push(previewMarker);
+        });
+    }
+    
+    // Function to clear paste preview markers
+    function clearPastePreviewMarkers() {
+        pastePreviewMarkers.forEach(marker => {
+            map.removeLayer(marker);
+        });
+        pastePreviewMarkers = [];
+    }
+    
+    // Function to clear all paste preview state
+    function clearPastePreview() {
+        clearPastePreviewMarkers();
+        pasteRotationControlsDiv.style.display = 'none';
+        isPastePreviewing = false;
+    }
+    
+    // Function to confirm paste and add previewed cones to map
+    function confirmPaste() {
+        // Get current preview state
+        const angleRadians = (pastePreviewRotationAngle * Math.PI) / 180;
+        
+        // Add each preview cone to the actual map
+        clipboardCones.forEach(clipboardCone => {
+            const relPos = clipboardCone.relativePosMeters;
+            
+            // Apply rotation to the relative position
+            const rotatedPos = rotatePointAroundOrigin(
+                { x: relPos.x, y: relPos.y },
+                { x: 0, y: 0 },
+                angleRadians
+            );
+            
+            // Convert rotated relative position to map coordinates
+            const newLatLng = relativePositionToLatLng(
+                clipboardReferencePoint, 
+                rotatedPos.x, 
+                rotatedPos.y
+            );
+            
+            // Add the actual cone to the map
+            addConesToMap(newLatLng, clipboardCone.type);
+            
+            // Set the rotation angle for the newly added cone
+            const newCone = cones[cones.length - 1];
+            const newMarker = coneMarkers[coneMarkers.length - 1];
+            
+            // Apply original rotation plus any additional rotation from the paste rotation
+            const finalAngle = (clipboardCone.angle + pastePreviewRotationAngle) % 360;
+            newCone.angle = finalAngle;
+            newMarker.setRotationAngle(finalAngle);
+        });
+        
+        // Clear the paste preview
+        clearPastePreview();
+    }
+    
+    // Event listeners for paste rotation controls
+    pasteRotationSlider.addEventListener('input', function() {
+        pastePreviewRotationAngle = parseInt(this.value);
+        pasteRotationValueDisplay.textContent = this.value;
+        updatePastePreviewMarkers();
+    });
+    
+    confirmPasteBtn.addEventListener('click', confirmPaste);
+    
+    cancelPasteBtn.addEventListener('click', clearPastePreview);
+    
+    // Keyboard shortcuts for paste operations
+    document.addEventListener('keydown', function(e) {
+        // ESC key to cancel paste preview
+        if (e.key === 'Escape' && isPastePreviewing) {
+            clearPastePreview();
+        }
+        
+        // Enter key to confirm paste
+        if (e.key === 'Enter' && isPastePreviewing) {
+            confirmPaste();
+        }
+    });
+    
+    // Add right-click context menu to map
+    map.on('contextmenu', function(e) {
+        // Only show context menu if we have something in clipboard
+        if (clipboardCones.length > 0) {
+            // Clear existing menu items
+            contextMenu.innerHTML = '';
+            
+            // Position the menu at click location
+            contextMenu.style.left = e.originalEvent.pageX + 'px';
+            contextMenu.style.top = e.originalEvent.pageY + 'px';
+            
+            // Create the paste option
+            const menuItem = document.createElement('div');
+            menuItem.className = 'context-menu-item';
+            menuItem.textContent = 'Paste here';
+            menuItem.style.padding = '8px 12px';
+            menuItem.style.cursor = 'pointer';
+            
+            menuItem.addEventListener('mouseover', function() {
+                this.style.backgroundColor = '#f0f0f0';
+            });
+            
+            menuItem.addEventListener('mouseout', function() {
+                this.style.backgroundColor = 'transparent';
+            });
+            
+            menuItem.addEventListener('click', function(evt) {
+                startPastePreview(e.latlng);
+                contextMenu.style.display = 'none';
+                evt.stopPropagation();
+            });
+            
+            contextMenu.appendChild(menuItem);
+            contextMenu.style.display = 'block';
+        }
+        
+        L.DomEvent.preventDefault(e);
     });
     
     // Import course data from JSON file
