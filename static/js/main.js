@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let courseElements = []; // To track elements for undo (each cone is 1 element)
     let gridLayer;
     let selectedCone = null; // To store { marker, data } of the selected cone
+    let selectedCones = []; // Array to store multiple selected cones for multi-select mode
     // Course path is made invisible (opacity 0) but still used for path length calculations
     let coursePath = L.polyline([], { color: '#FFFF00', weight: 3, opacity: 0 }).addTo(map);
     let measureLayer = L.layerGroup().addTo(map);
@@ -28,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let tempMeasureLine = null;
 
     const coneIcon = L.icon({
-        iconUrl: '/static/images/cone.svg',
+        iconUrl: '/static/images/circle_cone.svg',
         iconSize: [25, 25],
         iconAnchor: [12.5, 12.5]
     });
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const measurementValueSpan = document.getElementById('measurement-value');
     const exportJsonBtn = document.getElementById('export-json-btn');
     const importJsonBtn = document.getElementById('import-json-btn');
+    const selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
 
     // --- Helper Functions ---
     function calculatePathLength() {
@@ -103,83 +105,153 @@ document.addEventListener('DOMContentLoaded', function () {
         coursePath.setLatLngs(latLngs);
     }
 
+    function toggleConeSelection(cone) {
+        const index = selectedCones.findIndex(c => c.marker === cone.marker);
+        if (index === -1) {
+            // Add to selection
+            selectedCones.push(cone);
+            if (cone.marker._icon) {
+                cone.marker._icon.style.border = '2px solid #0078FF';
+                cone.marker._icon.style.boxShadow = '0 0 5px #0078FF';
+            }
+            
+            if (selectedCones.length === 1) {
+                // If only one cone is selected, also set it as the single selectedCone
+                // for rotation tools compatibility
+                selectedCone = cone;
+                selectedConeToolsDiv.style.display = 'block';
+                coneRotationSlider.value = cone.data.angle || 0;
+                selectedConeRotationValueDisplay.textContent = cone.data.angle || 0;
+            } else {
+                // Hide rotation tools when multiple cones are selected
+                selectedCone = null;
+                selectedConeToolsDiv.style.display = 'none';
+            }
+        } else {
+            // Remove from selection
+            selectedCones.splice(index, 1);
+            if (cone.marker._icon) {
+                cone.marker._icon.style.border = 'none';
+                cone.marker._icon.style.boxShadow = 'none';
+            }
+            
+            if (selectedCones.length === 1) {
+                // If only one cone remains selected, set it as the single selectedCone
+                selectedCone = selectedCones[0];
+                selectedConeToolsDiv.style.display = 'block';
+                coneRotationSlider.value = selectedCone.data.angle || 0;
+                selectedConeRotationValueDisplay.textContent = selectedCone.data.angle || 0;
+            } else if (selectedCones.length === 0) {
+                // If no cones are selected, hide rotation tools
+                selectedCone = null;
+                selectedConeToolsDiv.style.display = 'none';
+            }
+        }
+    }
+
     function addConesToMap(coneLatLng, type = 'regular_cone') {
         console.log('addConesToMap called with:', coneLatLng, 'type:', type);
         const iconToUse = type === 'laid_down_cone' ? laidDownConeIcon : coneIcon;
         let coneData, marker;
 
-        if (type === 'laid_down_cone') {
-            console.log('Attempting to create a laid_down_cone');
-            coneData = { latlng: coneLatLng, type: type, angle: 0 };
-            // Create a standard marker first, then set rotation (L.rotatedMarker doesn't exist)
-            marker = L.marker(coneLatLng, { 
-                icon: iconToUse,
-                draggable: true  // Make marker draggable
-            }).addTo(map);
-            marker.setRotationAngle(0);
+        // Common cone data setup
+        coneData = { latlng: coneLatLng, type: type, angle: 0 };
+        
+        // Create marker
+        marker = L.marker(coneLatLng, { 
+            icon: iconToUse,
+            draggable: true  // Make marker draggable
+        }).addTo(map);
+        marker.setRotationAngle(0);
+        
+        // Create cone object for reference
+        const cone = { marker: marker, data: coneData };
+        
+        // Handle drag events to update cone position with multi-select support
+        marker.on('dragstart', function(e) {
+            // Store original position for all selected cones for relative movement
+            if (selectedCones.includes(cone)) {
+                // When dragging a selected cone, all selected cones should move together
+                selectedCones.forEach(c => {
+                    c.originalPos = L.latLng(c.marker.getLatLng().lat, c.marker.getLatLng().lng);
+                });
+                // Store the start drag position
+                cone.dragStartPos = L.latLng(marker.getLatLng().lat, marker.getLatLng().lng);
+            }
+        });
+        
+        marker.on('drag', function(e) {
+            // Only do group drag if this cone is part of the selection
+            if (selectedCones.includes(cone)) {
+                // Calculate the offset from the start position
+                const currentPos = marker.getLatLng();
+                const latOffset = currentPos.lat - cone.dragStartPos.lat;
+                const lngOffset = currentPos.lng - cone.dragStartPos.lng;
+                
+                // Move all other selected cones by the same offset
+                selectedCones.forEach(c => {
+                    if (c !== cone) { // Skip the cone being directly dragged
+                        const newLat = c.originalPos.lat + latOffset;
+                        const newLng = c.originalPos.lng + lngOffset;
+                        c.marker.setLatLng([newLat, newLng]);
+                        c.data.latlng = c.marker.getLatLng();
+                    }
+                });
+            }
+        });
+        
+        marker.on('dragend', function(e) {
+            // Update position data
+            coneData.latlng = marker.getLatLng();
             
-            // Handle drag events to update cone position
-            marker.on('dragend', function(e) {
-                coneData.latlng = marker.getLatLng();
-                calculatePathLength();
-                redrawPath();
-            }); // This extension method comes from the Leaflet.RotatedMarker plugin
-            marker.on('click', function(e) { // Pass 'e' to the handler
-                // If this cone is already selected, deselect it by acting like a map click
-                if (selectedCone && selectedCone.marker === marker) {
+            // Clean up any temporary properties
+            if (selectedCones.includes(cone)) {
+                selectedCones.forEach(c => {
+                    delete c.originalPos;
+                });
+                delete cone.dragStartPos;
+            }
+            
+            calculatePathLength();
+            redrawPath();
+        });
+        
+        // Handle click with multi-select support
+        marker.on('click', function(e) {
+            // Check if we're in multi-select mode (either Shift key pressed or checkbox selected)
+            if (e.originalEvent.shiftKey || selectionModeCheckbox.checked) {
+                // Toggle selection for this cone
+                toggleConeSelection(cone);
+            } else {
+                // Single selection mode
+                // If this cone is already selected and the only one selected, deselect it
+                if (selectedCone && selectedCone.marker === marker && selectedCones.length === 1) {
                     handleMapClickDeselection();
                     return;
                 }
-                selectedCone = { marker: marker, data: coneData };
-                selectedConeToolsDiv.style.display = 'block';
-                coneRotationSlider.value = coneData.angle;
-                selectedConeRotationValueDisplay.textContent = coneData.angle;
-                // Prevent map click from firing and deselecting immediately
-                L.DomEvent.stopPropagation(e);
-            });
-            
-            // Add context menu for laid down cones
-            marker.on('contextmenu', function(e) {
-                showContextMenu(e, marker, coneData);
-                L.DomEvent.stopPropagation(e);
-                L.DomEvent.preventDefault(e);
-            });
-        } else { // regular_cone
-            coneData = { latlng: coneLatLng, type: type, angle: 0 }; // Add angle property for regular cones too
-            marker = L.marker(coneLatLng, { 
-                icon: iconToUse,
-                draggable: true  // Make marker draggable
-            }).addTo(map);
-            marker.setRotationAngle(0); // Apply rotation to regular cones too
-            
-            // Handle drag events to update cone position
-            marker.on('dragend', function(e) {
-                coneData.latlng = marker.getLatLng();
-                calculatePathLength();
-                redrawPath();
-            });
-            // Allow regular cones to be selected for rotation just like laid down cones
-            marker.on('click', function(e) { // Pass 'e' to the handler
-                // If this cone is already selected, deselect it by acting like a map click
-                if (selectedCone && selectedCone.marker === marker) {
-                    handleMapClickDeselection();
-                    return;
+                // Clear any other selected cones first
+                handleMapClickDeselection();
+                // Then select just this cone
+                selectedCone = cone;
+                selectedCones.push(cone);
+                if (cone.marker._icon) {
+                    cone.marker._icon.style.border = '2px solid #0078FF';
+                    cone.marker._icon.style.boxShadow = '0 0 5px #0078FF';
                 }
-                selectedCone = { marker: marker, data: coneData };
                 selectedConeToolsDiv.style.display = 'block';
                 coneRotationSlider.value = coneData.angle;
                 selectedConeRotationValueDisplay.textContent = coneData.angle;
-                // Prevent map click from firing and deselecting immediately
-                L.DomEvent.stopPropagation(e);
-            });
-            
-            // Add context menu for regular cones
-            marker.on('contextmenu', function(e) {
-                showContextMenu(e, marker, coneData);
-                L.DomEvent.stopPropagation(e);
-                L.DomEvent.preventDefault(e);
-            });
-        }
+            }
+            // Prevent map click from firing and deselecting immediately
+            L.DomEvent.stopPropagation(e);
+        });
+        
+        // Add context menu
+        marker.on('contextmenu', function(e) {
+            showContextMenu(e, marker, coneData);
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+        });
         
         cones.push(coneData);
         coneMarkers.push(marker);
@@ -359,6 +431,14 @@ document.addEventListener('DOMContentLoaded', function () {
             selectedCone = null;
             selectedConeToolsDiv.style.display = 'none';
         }
+        // Clear multi-selection
+        selectedCones.forEach(cone => {
+            if (cone.marker._icon) {
+                cone.marker._icon.style.border = 'none';
+                cone.marker._icon.style.boxShadow = 'none';
+            }
+        });
+        selectedCones = [];
     }
     
     function showContextMenu(e, marker, coneData) {
