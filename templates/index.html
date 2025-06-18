@@ -12,7 +12,7 @@
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
     <script src="{{ url_for('static', filename='js/leaflet.rotatedMarker.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1000, 9999) | random }}" defer></script>
 </head>
 <body>
     <div id="sidebar">

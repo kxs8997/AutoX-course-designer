@@ -87,6 +87,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
 
     // --- Helper Functions ---
+    function clearAllCones() {
+        handleMapClickDeselection(); // Deselect cone before clearing
+        coneMarkers.forEach(marker => map.removeLayer(marker));
+        coneMarkers = [];
+        cones = [];
+        courseElements = [];
+        redrawPath();
+        coneCountSpan.textContent = '0';
+    }
+    
     function calculatePathLength() {
         coneCountSpan.textContent = cones.length;
         let totalDistance = 0;
@@ -106,7 +116,21 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function toggleConeSelection(cone) {
+        const isSelectionMode = selectionModeCheckbox.checked;
         const index = selectedCones.findIndex(c => c.marker === cone.marker);
+        
+        // If not in selection mode, deselect all other cones first
+        if (!isSelectionMode && index === -1) {
+            // Deselect all currently selected cones
+            selectedCones.forEach(c => {
+                if (c.marker._icon) {
+                    c.marker._icon.style.border = 'none';
+                    c.marker._icon.style.boxShadow = 'none';
+                }
+            });
+            selectedCones = [];
+        }
+        
         if (index === -1) {
             // Add to selection
             selectedCones.push(cone);
@@ -712,18 +736,17 @@ document.addEventListener('DOMContentLoaded', function () {
                             // Create the marker based on type
                             let marker;
                             if (coneType === 'laid_down_cone') {
-                                marker = L.rotatedMarker(latlng, {
+                                marker = L.marker(latlng, {
                                     icon: laidDownConeIcon,
-                                    draggable: true,
-                                    rotationOrigin: 'center center'
+                                    draggable: true
                                 }).addTo(map);
                             } else { // regular cone
-                                marker = L.rotatedMarker(latlng, {
+                                marker = L.marker(latlng, {
                                     icon: coneIcon,
-                                    draggable: true,
-                                    rotationOrigin: 'center center'
+                                    draggable: true
                                 }).addTo(map);
                             }
+                            marker.setRotationAngle(0);
                             
                             // Set rotation angle if it exists
                             if (coneData.angle) {
@@ -731,6 +754,45 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
                             
                             // Setup event handlers
+                            // Create a reference to this cone for event handlers
+                            const importedCone = {
+                                marker: marker,
+                                data: newCone
+                            };
+                            
+                            // Handle drag events to update cone position with multi-select support
+                            marker.on('dragstart', function(e) {
+                                // Store original position for all selected cones for relative movement
+                                if (selectedCones.includes(importedCone)) {
+                                    // When dragging a selected cone, all selected cones should move together
+                                    selectedCones.forEach(c => {
+                                        c.originalPos = L.latLng(c.marker.getLatLng().lat, c.marker.getLatLng().lng);
+                                    });
+                                    // Store the start drag position
+                                    importedCone.dragStartPos = L.latLng(marker.getLatLng().lat, marker.getLatLng().lng);
+                                }
+                            });
+                            
+                            marker.on('drag', function(e) {
+                                // Only do group drag if this cone is part of the selection
+                                if (selectedCones.includes(importedCone)) {
+                                    // Calculate the offset from the start position
+                                    const currentPos = marker.getLatLng();
+                                    const latOffset = currentPos.lat - importedCone.dragStartPos.lat;
+                                    const lngOffset = currentPos.lng - importedCone.dragStartPos.lng;
+                                    
+                                    // Move all other selected cones by the same offset
+                                    selectedCones.forEach(c => {
+                                        if (c !== importedCone) { // Skip the cone being directly dragged
+                                            const newLat = c.originalPos.lat + latOffset;
+                                            const newLng = c.originalPos.lng + lngOffset;
+                                            c.marker.setLatLng([newLat, newLng]);
+                                            c.data.latlng = c.marker.getLatLng();
+                                        }
+                                    });
+                                }
+                            });
+                            
                             marker.on('dragend', function(e) {
                                 // Update the cone's position in the cones array
                                 for (let i = 0; i < cones.length; i++) {
@@ -739,19 +801,26 @@ document.addEventListener('DOMContentLoaded', function () {
                                         break;
                                     }
                                 }
+                                
+                                // Clean up any temporary properties
+                                if (selectedCones.includes(importedCone)) {
+                                    selectedCones.forEach(c => {
+                                        delete c.originalPos;
+                                    });
+                                    delete importedCone.dragStartPos;
+                                }
+                                
                                 // Recalculate the course path
                                 calculatePathLength();
+                                redrawPath();
                             });
                             
                             marker.on('contextmenu', function(e) {
-                                showContextMenu(e, marker);
+                                showContextMenu(e, marker, newCone);
                             });
                             
                             marker.on('click', function() {
-                                selectCone({
-                                    marker: marker,
-                                    data: newCone
-                                });
+                                toggleConeSelection(importedCone);
                             });
                             
                             // Add to our arrays
