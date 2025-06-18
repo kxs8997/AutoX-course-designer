@@ -524,22 +524,42 @@ document.addEventListener('DOMContentLoaded', function () {
         contextMenu.style.left = clickEvent.pageX + 'px';
         contextMenu.style.top = clickEvent.pageY + 'px';
         
-        // Create and add menu items
-        const options = [
-            { text: 'Delete Cone', action: function() { deleteCone(marker, coneData); }},
-            { text: 'Toggle Cone Type', action: function() { toggleConeType(marker, coneData); }}
-        ];
+        const options = [];
+        const isMultiSelect = selectionModeCheckbox.checked && selectedCones.length > 1;
         
-        // Add 'Reset Rotation' option for all cone types since all can be rotated now
-        options.push({ text: 'Reset Rotation', action: function() { resetConeRotation(marker, coneData); }});
-        
-        // Add 'Copy Selected Cones' option if in multi-select mode and there are selected cones
-        const isSelectionMode = selectionModeCheckbox.checked;
-        if (isSelectionMode && selectedCones.length > 0) {
-            options.push({ text: 'Copy Selected Cones', action: function() { copyCones(); }});
+        if (isMultiSelect) {
+            // For multi-select, only show multi-cone operations
+            options.push({
+                text: 'Copy Selected Cones',
+                action: function() {
+                    copyCones();
+                }
+            });
+            
+            options.push({
+                text: 'Delete Selected Cones',
+                action: function() {
+                    deleteSelectedCones();
+                }
+            });
+        } else {
+            // For single-cone operations
+            options.push({ text: 'Delete Cone', action: function() { deleteCone(marker, coneData); }});
+            options.push({ text: 'Toggle Cone Type', action: function() { toggleConeType(marker, coneData); }});
+            options.push({ text: 'Reset Rotation', action: function() { resetConeRotation(marker, coneData); }});
+            
+            // Add 'Copy Selected Cone' if in selection mode with exactly one cone selected
+            if (selectionModeCheckbox.checked && selectedCones.length === 1) {
+                options.push({
+                    text: 'Copy Selected Cone',
+                    action: function() {
+                        copyCones();
+                    }
+                });
+            }
         }
         
-        // Add 'Paste here' option if clipboard has cones
+        // Add 'Paste here' option if clipboard has cones - available for both single and multi-select
         if (clipboardCones.length > 0) {
             options.push({ text: 'Paste here', action: function() { 
                 startPastePreview(coneData.marker.getLatLng()); 
@@ -598,6 +618,36 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
+    function deleteSelectedCones() {
+        if (selectedCones.length === 0) return;
+        
+        // Remove all selected cones from the map and arrays
+        selectedCones.forEach(coneObj => {
+            // Find the index of the cone in the arrays
+            const index = cones.findIndex(cone => cone === coneObj.data);
+            if (index !== -1) {
+                // Remove from arrays
+                cones.splice(index, 1);
+                coneMarkers.splice(index, 1);
+                
+                // Remove from map
+                map.removeLayer(coneObj.marker);
+            }
+        });
+        
+        // Clear the selected cones array
+        selectedCones = [];
+        selectedCone = null;
+        
+        // Hide the selection tools
+        selectedConeToolsDiv.style.display = 'none';
+        
+        // Update path and stats
+        redrawPath();
+        calculatePathLength();
+        document.getElementById('cone-count').textContent = cones.length;
+    }
+
     function toggleConeType(marker, coneData) {
         // Remove old marker from map
         map.removeLayer(marker);
@@ -668,19 +718,15 @@ document.addEventListener('DOMContentLoaded', function () {
     let multiConeOriginalPositions = [];
     let multiConeRotationAngle = 0;
     
-    // Function to calculate the centroid of selected cones
-    function calculateSelectedConesCentroid() {
+    // Function to get rotation pivot point (first cone in selection)
+    function getRotationPivotPoint() {
         if (selectedCones.length === 0) return null;
         
-        let totalLat = 0;
-        let totalLng = 0;
-        
-        selectedCones.forEach(cone => {
-            totalLat += cone.marker.getLatLng().lat;
-            totalLng += cone.marker.getLatLng().lng;
-        });
-        
-        return L.latLng(totalLat / selectedCones.length, totalLng / selectedCones.length);
+        // Use the first cone in the selection as the pivot point
+        return L.latLng(
+            selectedCones[0].marker.getLatLng().lat,
+            selectedCones[0].marker.getLatLng().lng
+        );
     }
     
     // Function to store original positions of selected cones
@@ -715,7 +761,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // When the slider is first clicked/touched, initialize the rotation state
     coneRotationSlider.addEventListener('mousedown', function() {
         if (selectedCones.length > 1) {
-            multiConeRotationCentroid = calculateSelectedConesCentroid();
+            multiConeRotationCentroid = getRotationPivotPoint();
             storeSelectedConesOriginalPositions();
             multiConeRotationAngle = 0;
             this.value = 0;
@@ -725,7 +771,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
     coneRotationSlider.addEventListener('touchstart', function() {
         if (selectedCones.length > 1) {
-            multiConeRotationCentroid = calculateSelectedConesCentroid();
+            multiConeRotationCentroid = getRotationPivotPoint();
             storeSelectedConesOriginalPositions();
             multiConeRotationAngle = 0;
             this.value = 0;
@@ -750,6 +796,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Angle in radians
             const angleRadians = (rotationAngle * Math.PI) / 180;
             
+            // Clear previous preview markers first to avoid duplicates
             multiConeOriginalPositions.forEach(item => {
                 // Apply rotation to the relative position
                 const rotatedPos = rotatePointAroundOrigin(
@@ -769,7 +816,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 item.cone.marker.setLatLng(newLatLng);
                 item.cone.data.latlng = newLatLng;
                 
-                // Optionally rotate each cone's orientation too
+                // Always update cone's orientation by adding rotation to original orientation
                 const newAngle = (item.originalAngle + rotationAngle) % 360;
                 item.cone.marker.setRotationAngle(newAngle);
                 item.cone.data.angle = newAngle;
