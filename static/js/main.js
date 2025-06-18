@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const gridSizeInput = document.getElementById('gridSize'); 
     const gridRotationInput = document.getElementById('gridRotation');
     const gridRotationValueDisplay = document.getElementById('gridRotationValue');
+    const cursorModeCheckbox = document.getElementById('cursor-mode-checkbox');
     const snapCheckbox = document.getElementById('snap-to-grid-checkbox');
     const measureBtn = document.getElementById('measure-btn');
     const selectedConeToolsDiv = document.getElementById('selectedConeTools');
@@ -463,6 +464,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 measureStartPoint = null; 
             }
             return; 
+        }
+        
+        // If cursor mode is active, don't place cones on map clicks
+        if (cursorModeCheckbox.checked) {
+            // Just handle deselection and exit without placing cones
+            handleMapClickDeselection();
+            return;
         }
 
         const selectedConeTypeRadio = document.querySelector('input[name="coneType"]:checked');
