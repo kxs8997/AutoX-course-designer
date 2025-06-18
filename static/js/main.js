@@ -148,15 +148,20 @@ document.addEventListener('DOMContentLoaded', function () {
             
             if (selectedCones.length === 1) {
                 // If only one cone is selected, also set it as the single selectedCone
-                // for rotation tools compatibility
                 selectedCone = cone;
                 selectedConeToolsDiv.style.display = 'block';
                 coneRotationSlider.value = cone.data.angle || 0;
                 selectedConeRotationValueDisplay.textContent = cone.data.angle || 0;
+                // Update title to indicate we're rotating a single cone
+                document.getElementById('selectedConeToolsTitle').textContent = 'Rotate Cone';
             } else {
-                // Hide rotation tools when multiple cones are selected
+                // Show rotation tools even with multiple cones selected
                 selectedCone = null;
-                selectedConeToolsDiv.style.display = 'none';
+                selectedConeToolsDiv.style.display = 'block';
+                coneRotationSlider.value = 0; // Reset to zero for multi-select
+                selectedConeRotationValueDisplay.textContent = '0';
+                // Update title to indicate we're rotating multiple cones
+                document.getElementById('selectedConeToolsTitle').textContent = 'Rotate Selected Cones';
             }
         } else {
             // Remove from selection
@@ -658,12 +663,117 @@ document.addEventListener('DOMContentLoaded', function () {
     map.on('moveend', drawGrid);
     map.on('zoomend', drawGrid); // Also update grid when zoom changes
 
-    coneRotationSlider.addEventListener('input', () => {
-        if (selectedCone) {
-            const newAngle = parseInt(coneRotationSlider.value);
-            selectedCone.data.angle = newAngle;
-            selectedCone.marker.setRotationAngle(newAngle);
-            selectedConeRotationValueDisplay.textContent = newAngle;
+    // Variables to track multi-cone rotation
+    let multiConeRotationCentroid = null;
+    let multiConeOriginalPositions = [];
+    let multiConeRotationAngle = 0;
+    
+    // Function to calculate the centroid of selected cones
+    function calculateSelectedConesCentroid() {
+        if (selectedCones.length === 0) return null;
+        
+        let totalLat = 0;
+        let totalLng = 0;
+        
+        selectedCones.forEach(cone => {
+            totalLat += cone.marker.getLatLng().lat;
+            totalLng += cone.marker.getLatLng().lng;
+        });
+        
+        return L.latLng(totalLat / selectedCones.length, totalLng / selectedCones.length);
+    }
+    
+    // Function to store original positions of selected cones
+    function storeSelectedConesOriginalPositions() {
+        multiConeOriginalPositions = [];
+        
+        selectedCones.forEach(cone => {
+            multiConeOriginalPositions.push({
+                cone: cone,
+                latlng: L.latLng(cone.marker.getLatLng().lat, cone.marker.getLatLng().lng),
+                relativeX: calculateDistanceInMeters(
+                    multiConeRotationCentroid.lng, multiConeRotationCentroid.lat,
+                    cone.marker.getLatLng().lng, multiConeRotationCentroid.lat
+                ),
+                relativeY: calculateDistanceInMeters(
+                    multiConeRotationCentroid.lng, multiConeRotationCentroid.lat,
+                    multiConeRotationCentroid.lng, cone.marker.getLatLng().lat
+                ),
+                originalAngle: cone.data.angle || 0
+            });
+            
+            // Adjust for quadrant (East is positive X, North is positive Y)
+            if (cone.marker.getLatLng().lng < multiConeRotationCentroid.lng) {
+                multiConeOriginalPositions[multiConeOriginalPositions.length - 1].relativeX *= -1;
+            }
+            if (cone.marker.getLatLng().lat < multiConeRotationCentroid.lat) {
+                multiConeOriginalPositions[multiConeOriginalPositions.length - 1].relativeY *= -1;
+            }
+        });
+    }
+    
+    // When the slider is first clicked/touched, initialize the rotation state
+    coneRotationSlider.addEventListener('mousedown', function() {
+        if (selectedCones.length > 1) {
+            multiConeRotationCentroid = calculateSelectedConesCentroid();
+            storeSelectedConesOriginalPositions();
+            multiConeRotationAngle = 0;
+            this.value = 0;
+            selectedConeRotationValueDisplay.textContent = 0;
+        }
+    });
+    
+    coneRotationSlider.addEventListener('touchstart', function() {
+        if (selectedCones.length > 1) {
+            multiConeRotationCentroid = calculateSelectedConesCentroid();
+            storeSelectedConesOriginalPositions();
+            multiConeRotationAngle = 0;
+            this.value = 0;
+            selectedConeRotationValueDisplay.textContent = 0;
+        }
+    });
+    
+    coneRotationSlider.addEventListener('input', function(e) {
+        // Update the value display
+        const rotationAngle = parseInt(this.value);
+        selectedConeRotationValueDisplay.textContent = rotationAngle;
+        
+        // Apply rotation to the selected cone(s)
+        if (selectedCones.length === 1 && selectedCone) {
+            // Single cone rotation - update the single selected cone's own rotation
+            selectedCone.marker.setRotationAngle(rotationAngle);
+            selectedCone.data.angle = rotationAngle;
+        } else if (selectedCones.length > 1) {
+            // Multi-cone rotation - rotate all cones around the common center
+            multiConeRotationAngle = rotationAngle;
+            
+            // Angle in radians
+            const angleRadians = (rotationAngle * Math.PI) / 180;
+            
+            multiConeOriginalPositions.forEach(item => {
+                // Apply rotation to the relative position
+                const rotatedPos = rotatePointAroundOrigin(
+                    { x: item.relativeX, y: item.relativeY },
+                    { x: 0, y: 0 },
+                    angleRadians
+                );
+                
+                // Convert rotated position back to map coordinates
+                const newLatLng = relativePositionToLatLng(
+                    multiConeRotationCentroid, 
+                    rotatedPos.x, 
+                    rotatedPos.y
+                );
+                
+                // Update the cone position
+                item.cone.marker.setLatLng(newLatLng);
+                item.cone.data.latlng = newLatLng;
+                
+                // Optionally rotate each cone's orientation too
+                const newAngle = (item.originalAngle + rotationAngle) % 360;
+                item.cone.marker.setRotationAngle(newAngle);
+                item.cone.data.angle = newAngle;
+            });
         }
     });
 
