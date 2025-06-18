@@ -46,6 +46,12 @@ document.addEventListener('DOMContentLoaded', function () {
         iconAnchor: [12.5, 12.5]
     });
     
+    const pointerConeIcon = L.icon({
+        iconUrl: '/static/images/pointer_cone.svg',
+        iconSize: [25, 25], // Adjust if needed based on SVG dimensions
+        iconAnchor: [12.5, 12.5]
+    });
+    
     // Blue dot icon for measurement points
     const measurementPointIcon = L.divIcon({
         className: 'measurement-point',
@@ -153,7 +159,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 coneRotationSlider.value = cone.data.angle || 0;
                 selectedConeRotationValueDisplay.textContent = cone.data.angle || 0;
                 // Update title to indicate we're rotating a single cone
-                document.getElementById('selectedConeToolsTitle').textContent = 'Rotate Cone';
+                const titleElement = document.getElementById('selectedConeToolsTitle');
+                if (titleElement) {
+                    titleElement.textContent = 'Rotate Cone';
+                }
             } else {
                 // Show rotation tools even with multiple cones selected
                 selectedCone = null;
@@ -161,7 +170,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 coneRotationSlider.value = 0; // Reset to zero for multi-select
                 selectedConeRotationValueDisplay.textContent = '0';
                 // Update title to indicate we're rotating multiple cones
-                document.getElementById('selectedConeToolsTitle').textContent = 'Rotate Selected Cones';
+                const titleElement = document.getElementById('selectedConeToolsTitle');
+                if (titleElement) {
+                    titleElement.textContent = 'Rotate Selected Cones';
+                }
             }
         } else {
             // Remove from selection
@@ -187,7 +199,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function addConesToMap(coneLatLng, type = 'regular_cone') {
         console.log('addConesToMap called with:', coneLatLng, 'type:', type);
-        const iconToUse = type === 'laid_down_cone' ? laidDownConeIcon : coneIcon;
+        let iconToUse;
+        if (type === 'laid_down_cone') {
+            iconToUse = laidDownConeIcon;
+        } else if (type === 'pointer_cone') {
+            iconToUse = pointerConeIcon;
+        } else {
+            iconToUse = coneIcon;
+        }
         let coneData, marker;
 
         // Common cone data setup
@@ -1027,8 +1046,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 rotatedPos.y
             );
             
-            // Create a preview marker with appropriate icon
-            const icon = clipboardCone.type === 'regular_cone' ? coneIcon : laidDownConeIcon;
+            // Create a preview marker with appropriate icon based on cone type
+            let icon;
+            if (clipboardCone.type === 'regular_cone') {
+                icon = coneIcon;
+            } else if (clipboardCone.type === 'pointer_cone') {
+                icon = pointerConeIcon;
+            } else {
+                icon = laidDownConeIcon;
+            }
+            
             const previewMarker = L.marker(newLatLng, {
                 icon: icon,
                 draggable: false,
