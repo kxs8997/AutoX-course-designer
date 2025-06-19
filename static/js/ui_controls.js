@@ -412,7 +412,12 @@ export class UIControls {
         this.app.state.isBoxSelectionMode = isBoxSelectionMode;
         
         // Apply appropriate settings for each mode
-        if (isCursorMode) {
+        if (isRegularMode) {
+            // Edit Mode: Disable map dragging to prevent conflicts with cone placement
+            console.log('Edit mode ON - disabling map dragging');
+            map.dragging.disable();
+            map.getContainer().style.cursor = 'default';
+        } else if (isCursorMode) {
             // Cursor Mode: Disable map dragging, set default cursor
             console.log('Cursor mode ON - disabling map dragging');
             map.dragging.disable();
