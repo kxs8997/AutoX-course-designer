@@ -83,19 +83,25 @@ export class ConeManager {
             this.nextConeId = id + 1;
         }
 
+        console.log(`Creating cone with type: ${type}`);
+        
         let icon;
         switch (type) {
             case 'regular_cone':
                 icon = this.icons.coneIcon;
+                console.log('Using REGULAR cone icon:', this.icons.coneIcon.options.iconUrl);
                 break;
             case 'laid_down_cone':
                 icon = this.icons.laidDownConeIcon;
+                console.log('Using LAID DOWN cone icon:', this.icons.laidDownConeIcon.options.iconUrl);
                 break;
             case 'pointer_cone':
                 icon = this.icons.pointerConeIcon;
+                console.log('Using POINTER cone icon:', this.icons.pointerConeIcon.options.iconUrl);
                 break;
             default:
                 icon = this.icons.coneIcon;
+                console.log('Using DEFAULT cone icon:', this.icons.coneIcon.options.iconUrl);
         }
         const marker = L.marker(latlng, {
             icon: icon,

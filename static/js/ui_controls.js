@@ -13,6 +13,9 @@ export class UIControls {
         this.boxSelectionRadio = document.getElementById('box-selection-radio');
         this.selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
         
+        // Cone type radios
+        this.coneTypeRadios = document.querySelectorAll('input[name="coneType"]');
+        
         // Map panning with spacebar
         this.isSpacebarDown = false;
         this.wasMapDraggingDisabled = false;
@@ -142,6 +145,7 @@ export class UIControls {
         pasteControlsDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
         pasteControlsDiv.style.zIndex = '1000';
         pasteControlsDiv.style.display = 'none';
+        console.log('Creating paste controls UI');
         
         // Create heading
         const heading = document.createElement('h4');
@@ -213,6 +217,18 @@ export class UIControls {
         this.pasteRotationValueDisplay = rotationValue;
         this.confirmPasteBtn = confirmBtn;
         this.cancelPasteBtn = cancelBtn;
+        
+        console.log('Paste controls created, binding event handlers in _initEventListeners');
+        
+        // Bind paste events right away
+        this._handlePasteRotationChange = this._handlePasteRotationChange.bind(this);
+        this._handleConfirmPaste = this._handleConfirmPaste.bind(this);
+        this._handleCancelPaste = this._handleCancelPaste.bind(this);
+        
+        // Add event listeners directly
+        rotationSlider.addEventListener('input', this._handlePasteRotationChange);
+        confirmBtn.addEventListener('click', this._handleConfirmPaste);
+        cancelBtn.addEventListener('click', this._handleCancelPaste);
     }
 
     _initEventListeners() {
@@ -232,11 +248,39 @@ export class UIControls {
         if (this.cursorModeRadio) this.cursorModeRadio.addEventListener('change', this._handleModeChange);
         if (this.boxSelectionRadio) this.boxSelectionRadio.addEventListener('change', this._handleModeChange);
         
+        // Cone type radios
+        this._handleConeTypeChange = this._handleConeTypeChange.bind(this);
+        if (this.coneTypeRadios) {
+            this.coneTypeRadios.forEach(radio => {
+                radio.addEventListener('change', this._handleConeTypeChange);
+                console.log('Added event listener to cone type radio:', radio.value);
+            });
+        }
+        
         // Add spacebar + mouse drag panning
         this._handleKeyDown = this._handleKeyDown.bind(this);
         this._handleKeyUp = this._handleKeyUp.bind(this);
         document.addEventListener('keydown', this._handleKeyDown);
         document.addEventListener('keyup', this._handleKeyUp);
+        
+        // Bind paste control event handlers
+        this._handleConfirmPaste = this._handleConfirmPaste.bind(this);
+        this._handleCancelPaste = this._handleCancelPaste.bind(this);
+        this._handlePasteRotationChange = this._handlePasteRotationChange.bind(this);
+        
+        // Add paste control event listeners
+        if (this.confirmPasteBtn) {
+            this.confirmPasteBtn.addEventListener('click', this._handleConfirmPaste);
+            console.log('Paste confirm button listener added');
+        }
+        if (this.cancelPasteBtn) {
+            this.cancelPasteBtn.addEventListener('click', this._handleCancelPaste);
+            console.log('Paste cancel button listener added');
+        }
+        if (this.pasteRotationSlider) {
+            this.pasteRotationSlider.addEventListener('input', this._handlePasteRotationChange);
+            console.log('Paste rotation slider listener added');
+        }
     }
 
     // --- Event Handlers ---
@@ -344,7 +388,9 @@ export class UIControls {
 
     _handleConeTypeChange(event) {
         if (this.app.state) {
-            this.app.state.selectedConeType = event.target.value;
+            const selectedType = event.target.value;
+            this.app.state.selectedConeType = selectedType;
+            console.log('Cone type changed to:', selectedType, 'Current state:', this.app.state);
         }
     }
 
