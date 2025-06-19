@@ -8,9 +8,16 @@ export class UIControls {
         this.undoBtn = document.getElementById('undo-btn');
         this.redoBtn = document.getElementById('redo-btn'); // Added Redo button
         this.clearBtn = document.getElementById('clear-btn');
-        this.cursorModeCheckbox = document.getElementById('cursor-mode-checkbox');
+        this.regularModeRadio = document.getElementById('regular-mode-radio');
+        this.cursorModeRadio = document.getElementById('cursor-mode-radio');
+        this.boxSelectionRadio = document.getElementById('box-selection-radio');
         this.selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
-        this.boxSelectionCheckbox = document.getElementById('box-selection-checkbox');
+        
+        // Map panning with spacebar
+        this.isSpacebarDown = false;
+        this.wasMapDraggingDisabled = false;
+        this.tempBoxSelectionActive = false;
+        this.originalCursor = '';
 
         // Cone Related UI
         this.coneCountSpan = document.getElementById('cone-count');
@@ -51,6 +58,33 @@ export class UIControls {
         this._handleRedo = this._handleRedo.bind(this); // Added Redo handler binding
         this._handleClearAll = this._handleClearAll.bind(this);
         this._handleSnapToggle = this._handleSnapToggle.bind(this);
+        
+        // Initialize mode state based on radio button state
+        // This ensures the app.state matches the UI on startup
+        if (this.app.state) {
+            this.app.state.isCursorMode = this.cursorModeRadio && this.cursorModeRadio.checked;
+            this.app.state.isBoxSelectionMode = this.boxSelectionRadio && this.boxSelectionRadio.checked;
+        }
+        
+        // Add event listener for DOMContentLoaded to ensure map exists
+        document.addEventListener('DOMContentLoaded', () => {
+            if (this.app && this.app.coneManager && this.app.coneManager.map) {
+                const map = this.app.coneManager.map;
+                
+                // Set appropriate cursor and dragging based on active mode
+                if (this.cursorModeRadio && this.cursorModeRadio.checked) {
+                    // Cursor mode: disable dragging, set default cursor
+                    map.dragging.disable();
+                    map.getContainer().style.cursor = 'default';
+                } else if (this.boxSelectionRadio && this.boxSelectionRadio.checked) {
+                    // Box selection mode: disable dragging
+                    map.dragging.disable();
+                } else {
+                    // Regular mode: enable dragging
+                    map.dragging.enable();
+                }
+            }
+        });
         this._handleGridSizeChange = this._handleGridSizeChange.bind(this);
         this._handleGridRotationChange = this._handleGridRotationChange.bind(this);
         this._handleMeasureToggle = this._handleMeasureToggle.bind(this);
@@ -60,9 +94,6 @@ export class UIControls {
         this._handleExportJson = this._handleExportJson.bind(this);
         this._handleImportJson = this._handleImportJson.bind(this);
         this._handleConeTypeChange = this._handleConeTypeChange.bind(this);
-        this._handleCursorModeToggle = this._handleCursorModeToggle.bind(this);
-        this._handleSelectionModeToggle = this._handleSelectionModeToggle.bind(this);
-        this._handleBoxSelectionToggle = this._handleBoxSelectionToggle.bind(this);
         this._handleConfirmPaste = this._handleConfirmPaste.bind(this);
         this._handleCancelPaste = this._handleCancelPaste.bind(this);
         this._handlePasteRotationChange = this._handlePasteRotationChange.bind(this);
@@ -194,33 +225,18 @@ export class UIControls {
         if (this.measureBtn) this.measureBtn.addEventListener('click', this._handleMeasureToggle);
         if (this.exportJsonBtn) this.exportJsonBtn.addEventListener('click', this._handleExportJson);
         if (this.importJsonBtn) this.importJsonBtn.addEventListener('click', this._handleImportJson);
-        if (this.cursorModeCheckbox) this.cursorModeCheckbox.addEventListener('change', this._handleCursorModeToggle);
-        if (this.selectionModeCheckbox) this.selectionModeCheckbox.addEventListener('change', this._handleSelectionModeToggle);
-        if (this.boxSelectionCheckbox) this.boxSelectionCheckbox.addEventListener('change', this._handleBoxSelectionToggle);
-
-        this.coneTypeRadios.forEach(radio => {
-            radio.addEventListener('change', this._handleConeTypeChange);
-        });
-
-        if (this.coneRotationSlider) {
-            this.coneRotationSlider.addEventListener('mousedown', this._handleConeRotationSliderMouseDownTouchStart);
-            this.coneRotationSlider.addEventListener('touchstart', this._handleConeRotationSliderMouseDownTouchStart, { passive: false });
-            this.coneRotationSlider.addEventListener('input', this._handleConeRotationSliderInput);
-            this.coneRotationSlider.addEventListener('mouseup', this._handleConeRotationSliderMouseUpTouchEnd);
-            this.coneRotationSlider.addEventListener('touchend', this._handleConeRotationSliderMouseUpTouchEnd);
-        }
         
-        // Paste preview controls are created dynamically, set up listeners here
-        if (this.confirmPasteBtn) {
-            this.confirmPasteBtn.addEventListener('click', this._handleConfirmPaste);
-        }
-        if (this.cancelPasteBtn) {
-            this.cancelPasteBtn.addEventListener('click', this._handleCancelPaste);
-        }
-        if (this.pasteRotationSlider) {
-            this.pasteRotationSlider.addEventListener('input', this._handlePasteRotationChange);
-        }
-        console.log('UIControls event listeners initialized.');
+        // Mode radio buttons
+        this._handleModeChange = this._handleModeChange.bind(this);
+        if (this.regularModeRadio) this.regularModeRadio.addEventListener('change', this._handleModeChange);
+        if (this.cursorModeRadio) this.cursorModeRadio.addEventListener('change', this._handleModeChange);
+        if (this.boxSelectionRadio) this.boxSelectionRadio.addEventListener('change', this._handleModeChange);
+        
+        // Add spacebar + mouse drag panning
+        this._handleKeyDown = this._handleKeyDown.bind(this);
+        this._handleKeyUp = this._handleKeyUp.bind(this);
+        document.addEventListener('keydown', this._handleKeyDown);
+        document.addEventListener('keyup', this._handleKeyUp);
     }
 
     // --- Event Handlers ---
@@ -332,12 +348,56 @@ export class UIControls {
         }
     }
 
-    _handleCursorModeToggle() {
-        if (this.app.state) this.app.state.isCursorMode = this.cursorModeCheckbox.checked;
-        console.log('Cursor mode toggled:', this.cursorModeCheckbox.checked);
-         if (this.cursorModeCheckbox.checked && this.selectionModeCheckbox.checked) {
-            this.selectionModeCheckbox.checked = false;
-            this._handleSelectionModeToggle(); // Update selection mode state
+    _handleModeChange(event) {
+        if (!this.app.state || !this.app.coneManager || !this.app.coneManager.map) return;
+        
+        const map = this.app.coneManager.map;
+        const mode = event.target.id;
+        
+        console.log('Mode changed to:', mode);
+        
+        // Update app state based on which radio is checked
+        const isCursorMode = mode === 'cursor-mode-radio';
+        const isBoxSelectionMode = mode === 'box-selection-radio';
+        const isRegularMode = mode === 'regular-mode-radio';
+        
+        // Update app state
+        this.app.state.isCursorMode = isCursorMode;
+        this.app.state.isBoxSelectionMode = isBoxSelectionMode;
+        
+        // Apply appropriate settings for each mode
+        if (isCursorMode) {
+            // Cursor Mode: Disable map dragging, set default cursor
+            console.log('Cursor mode ON - disabling map dragging');
+            map.dragging.disable();
+            map.getContainer().style.cursor = 'default';
+            
+            // Stop box selection if it was active
+            if (this.app.coneManager.isBoxSelectionActive) {
+                this.app.coneManager.stopBoxSelection();
+            }
+            
+            // Force update to ensure dragging is disabled
+            setTimeout(() => {
+                console.log('Forced map dragging state:', map.dragging.enabled() ? 'enabled' : 'disabled');
+            }, 100);
+        } 
+        else if (isBoxSelectionMode) {
+            // Box Selection Mode: Enable box selection, disable map dragging
+            console.log('Box selection mode ON - enabling box selection');
+            map.dragging.disable();
+            this.app.coneManager.startBoxSelection();
+        }
+        else if (isRegularMode) {
+            // Regular Mode: Enable map dragging, normal cursor
+            console.log('Regular mode ON - enabling map dragging');
+            map.dragging.enable();
+            map.getContainer().style.cursor = '';
+            
+            // Stop box selection if it was active
+            if (this.app.coneManager.isBoxSelectionActive) {
+                this.app.coneManager.stopBoxSelection();
+            }
         }
     }
 
@@ -345,14 +405,92 @@ export class UIControls {
         const isSelectionMode = this.selectionModeCheckbox.checked;
         if (this.app.state) this.app.state.isSelectionMode = isSelectionMode;
         console.log('Selection mode toggled:', isSelectionMode);
+        
         if (isSelectionMode) {
-            if (this.cursorModeCheckbox.checked) {
+            // Turn off cursor mode when selection mode is toggled on
+            if (this.cursorModeCheckbox && this.cursorModeCheckbox.checked) {
                 this.cursorModeCheckbox.checked = false;
                 this._handleCursorModeToggle(); // Update cursor mode state
             }
-            if (this.boxSelectionCheckbox.checked) {
+            
+            // Turn off box selection when selection mode is toggled on
+            if (this.boxSelectionCheckbox && this.boxSelectionCheckbox.checked) {
                 this.boxSelectionCheckbox.checked = false;
                 this._handleBoxSelectionToggle(); // Update box selection mode state
+            }
+        }
+    }
+    
+    _handleKeyDown(e) {
+        // Check if spacebar is pressed (keyCode 32)
+        console.log('KeyDown event:', e.keyCode, ', isSpacebarDown:', this.isSpacebarDown);
+        
+        // Only process spacebar if it's not already being held down
+        if (e.keyCode === 32 && !this.isSpacebarDown && this.app.coneManager && this.app.coneManager.map) {
+            this.isSpacebarDown = true;
+            console.log('Spacebar pressed - enabling map dragging');
+            
+            const map = this.app.coneManager.map;
+            
+            // Store the original cursor style of the map container
+            this.originalCursor = map.getContainer().style.cursor;
+            
+            // Change cursor to indicate panning is available
+            map.getContainer().style.cursor = 'grab';
+            
+            // Enable dragging on the map regardless of current mode
+            map.dragging.enable();
+            
+            // If box selection is active, temporarily save the state
+            const wasBoxSelectionActive = this.app.coneManager.isBoxSelectionActive;
+            
+            // If it was active, temporarily disable it
+            if (wasBoxSelectionActive) {
+                this.app.coneManager.stopBoxSelection();
+                this.tempBoxSelectionActive = true;
+            }
+            
+            // Prevent default space bar behavior (page scroll)
+            e.preventDefault();
+        }
+    }
+    
+    _handleKeyUp(e) {
+        // Check if spacebar is released
+        console.log('KeyUp event:', e.keyCode, ', isSpacebarDown:', this.isSpacebarDown);
+        if (e.keyCode === 32 && this.isSpacebarDown && this.app.coneManager && this.app.coneManager.map) {
+            this.isSpacebarDown = false;
+            console.log('Spacebar released - restoring previous state');
+            
+            const map = this.app.coneManager.map;
+            
+            // Restore the appropriate cursor style based on mode
+            if (this.cursorModeRadio && this.cursorModeRadio.checked) {
+                // In cursor mode, always use default cursor
+                map.getContainer().style.cursor = 'default';
+                
+                // Disable map dragging in cursor mode
+                map.dragging.disable();
+            } else if (this.boxSelectionRadio && this.boxSelectionRadio.checked) {
+                // In selection tool mode, disable dragging
+                map.getContainer().style.cursor = this.originalCursor || '';
+                map.dragging.disable();
+            } else {
+                // In regular mode, enable dragging and restore cursor
+                map.getContainer().style.cursor = this.originalCursor || '';
+                map.dragging.enable();
+            }
+            
+            // Restore previous state if box selection was active
+            if (this.tempBoxSelectionActive && this.app.coneManager) {
+                this.app.coneManager.startBoxSelection();
+                this.tempBoxSelectionActive = false;
+            }
+            
+            // If map dragging was disabled before, disable it again
+            if (this.wasMapDraggingDisabled && this.app.coneManager && this.app.coneManager.map) {
+                this.app.coneManager.map.dragging.disable();
+                this.wasMapDraggingDisabled = false;
             }
         }
     }
@@ -368,7 +506,7 @@ export class UIControls {
                 this.app.coneManager.deselectAllCones();
             }
             
-            // Turn off other modes that would conflict
+            // Turn off cursor mode when selection tool is toggled on
             if (this.cursorModeCheckbox.checked) {
                 this.cursorModeCheckbox.checked = false;
                 this._handleCursorModeToggle(); // Update cursor mode state
@@ -516,7 +654,7 @@ export class UIControls {
     showPasteControls(initialAngle) {
         console.log('UIControls: Show paste controls, initial angle:', initialAngle);
         if (this.pastePreviewControlsDiv) {
-            this.pastePreviewControlsDiv.style.display = 'block';
+             this.pastePreviewControlsDiv.style.display = 'block';
             
             // Position it properly over the map
             const mapContainer = document.getElementById('map');

@@ -32,9 +32,11 @@
         </div>
         <div class="control-group">
             <h3>Tools</h3>
-            <label><input type="checkbox" id="cursor-mode-checkbox" checked> Cursor Mode</label><br>
+            <label><input type="radio" name="interaction-mode" id="regular-mode-radio" checked> Regular Mode</label><br>
+            <label><input type="radio" name="interaction-mode" id="cursor-mode-radio"> Cursor Mode</label><br>
+            <label><input type="radio" name="interaction-mode" id="box-selection-radio"> Selection Tool</label><br>
             <label style="display: none;"><input type="checkbox" id="selection-mode-checkbox"> Selection Mode</label>
-            <label><input type="checkbox" id="box-selection-checkbox"> Selection Tool</label><br>
+
             <label><input type="checkbox" id="snap-to-grid-checkbox"> Snap to Grid</label><br>
             <label for="gridSize">Grid Size (feet):</label>
             <input type="number" id="gridSize" value="10" min="1"><br>
