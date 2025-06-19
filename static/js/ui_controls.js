@@ -10,6 +10,7 @@ export class UIControls {
         this.clearBtn = document.getElementById('clear-btn');
         this.cursorModeCheckbox = document.getElementById('cursor-mode-checkbox');
         this.selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
+        this.boxSelectionCheckbox = document.getElementById('box-selection-checkbox');
 
         // Cone Related UI
         this.coneCountSpan = document.getElementById('cone-count');
@@ -61,6 +62,7 @@ export class UIControls {
         this._handleConeTypeChange = this._handleConeTypeChange.bind(this);
         this._handleCursorModeToggle = this._handleCursorModeToggle.bind(this);
         this._handleSelectionModeToggle = this._handleSelectionModeToggle.bind(this);
+        this._handleBoxSelectionToggle = this._handleBoxSelectionToggle.bind(this);
         this._handleConfirmPaste = this._handleConfirmPaste.bind(this);
         this._handleCancelPaste = this._handleCancelPaste.bind(this);
         this._handlePasteRotationChange = this._handlePasteRotationChange.bind(this);
@@ -194,6 +196,7 @@ export class UIControls {
         if (this.importJsonBtn) this.importJsonBtn.addEventListener('click', this._handleImportJson);
         if (this.cursorModeCheckbox) this.cursorModeCheckbox.addEventListener('change', this._handleCursorModeToggle);
         if (this.selectionModeCheckbox) this.selectionModeCheckbox.addEventListener('change', this._handleSelectionModeToggle);
+        if (this.boxSelectionCheckbox) this.boxSelectionCheckbox.addEventListener('change', this._handleBoxSelectionToggle);
 
         this.coneTypeRadios.forEach(radio => {
             radio.addEventListener('change', this._handleConeTypeChange);
@@ -342,9 +345,48 @@ export class UIControls {
         const isSelectionMode = this.selectionModeCheckbox.checked;
         if (this.app.state) this.app.state.isSelectionMode = isSelectionMode;
         console.log('Selection mode toggled:', isSelectionMode);
-        if (isSelectionMode && this.cursorModeCheckbox.checked) {
-            this.cursorModeCheckbox.checked = false;
-            this._handleCursorModeToggle(); // Update cursor mode state
+        if (isSelectionMode) {
+            if (this.cursorModeCheckbox.checked) {
+                this.cursorModeCheckbox.checked = false;
+                this._handleCursorModeToggle(); // Update cursor mode state
+            }
+            if (this.boxSelectionCheckbox.checked) {
+                this.boxSelectionCheckbox.checked = false;
+                this._handleBoxSelectionToggle(); // Update box selection mode state
+            }
+        }
+    }
+    
+    _handleBoxSelectionToggle() {
+        const isBoxSelectionMode = this.boxSelectionCheckbox.checked;
+        if (this.app.state) this.app.state.isBoxSelectionMode = isBoxSelectionMode;
+        console.log('Box selection mode toggled:', isBoxSelectionMode);
+        
+        if (isBoxSelectionMode) {
+            // If box selection is turned on, deselect any currently selected cones
+            if (this.app.coneManager) {
+                this.app.coneManager.deselectAllCones();
+            }
+            
+            // Turn off other modes that would conflict
+            if (this.cursorModeCheckbox.checked) {
+                this.cursorModeCheckbox.checked = false;
+                this._handleCursorModeToggle(); // Update cursor mode state
+            }
+            if (this.selectionModeCheckbox.checked) {
+                this.selectionModeCheckbox.checked = false;
+                this._handleSelectionModeToggle(); // Update selection mode state
+            }
+
+            // Start the box selection mode
+            if (this.app.coneManager) {
+                this.app.coneManager.startBoxSelection();
+            }
+        } else {
+            // Clean up box selection when toggled off
+            if (this.app.coneManager) {
+                this.app.coneManager.stopBoxSelection();
+            }
         }
     }
     

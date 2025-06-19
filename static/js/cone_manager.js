@@ -20,6 +20,13 @@ export class ConeManager {
         this.multiConeRotationCentroid = null;
         this.multiConeOriginalPositions = [];
         this.multiConeRotationAngle = 0; // Relative angle applied during UI interaction
+        
+        // For box selection tool
+        this.isBoxSelectionActive = false;
+        this.boxSelectionStart = null;
+        this.boxSelectionEnd = null;
+        this.boxSelectionRect = null;
+        this.crosshair = null;
 
         this._bindEventHandlers();
     }
@@ -27,6 +34,30 @@ export class ConeManager {
     _bindEventHandlers() {
         this.map.on('click', this._handleMapClickForPlacement.bind(this));
         this.map.on('contextmenu', this._handleMapContextMenu.bind(this));
+    }
+    
+    _handleMapClickForPlacement(e) {
+        // Prevent cone placement if box selection is active
+        if (this.isBoxSelectionActive) {
+            // Don't place cones during box selection
+            L.DomEvent.preventDefault(e);
+            L.DomEvent.stopPropagation(e);
+            return;
+        }
+        
+        const latlng = e.latlng;
+        const coneType = this.app.state.selectedConeType;
+        
+        if (this.app.state.isCursorMode || (this.uiBridge.app.clipboardManager && this.uiBridge.app.clipboardManager.pastePreviewActive)) {
+            // In cursor mode, simply deselect all cones unless clicking on a cone (which is handled by the cone's click handler)
+            this.deselectAllCones();
+        } else if (this.app.state.isSelectionMode) {
+            // In selection mode, just deselect all cones
+            this.deselectAllCones();
+        } else {
+            // Add cone if none of the above
+            this.addCone(latlng, coneType);
+        }
     }
     
     _handleMapContextMenu(e) {
@@ -290,93 +321,72 @@ export class ConeManager {
                 this.pathLengthMeters += latlngs[i].distanceTo(latlngs[i + 1]);
             }
         }
-        this.uiBridge.updatePathLength(this.pathLengthMeters);
-        return this.pathLengthMeters;
     }
 
-    // --- Map Click Handling for Placement/Deselection ---
-    _handleMapClickForPlacement(e) {
-        if (this.app.state.isCursorMode || (this.uiBridge.app.clipboardManager && this.uiBridge.app.clipboardManager.pastePreviewActive)) {
-            // In cursor mode or during paste preview, just deselect all if clicking on empty space
-            let targetElement = e.originalEvent.target;
-            let clickedOnConeMarker = false;
-            while (targetElement && targetElement !== this.map.getContainer()) {
-                if (targetElement.classList && targetElement.classList.contains('leaflet-marker-icon')) {
-                    clickedOnConeMarker = true;
-                    break;
-                }
-                targetElement = targetElement.parentNode;
-            }
-
-            if (!clickedOnConeMarker) {
-                this.deselectAllCones();
-            }
-            return;
-        } else if (this.app.state.isSelectionMode) {
-            // In selection mode, only check if clicked on empty space - but don't deselect
-            // This allows multi-selection to work properly
-            let targetElement = e.originalEvent.target;
-            let clickedOnConeMarker = false;
-            while (targetElement && targetElement !== this.map.getContainer()) {
-                if (targetElement.classList && targetElement.classList.contains('leaflet-marker-icon')) {
-                    clickedOnConeMarker = true;
-                    break;
-                }
-                targetElement = targetElement.parentNode;
-            }
-            
-            // Don't deselect in selection mode - return immediately
-            return;
-        }
-
-        let latlng = e.latlng;
-        if (this.gridTool) {
-            latlng = this.gridTool.snapToGrid(latlng);
-        }
-        const coneType = this.app.state.selectedConeType || 'regular_cone';
-        this.addCone(latlng, coneType);
-    }
-
-    // --- Cone Operations ---
     deleteCone(coneData, isUndoRedoOperation = false) {
         const index = this.cones.findIndex(c => c === coneData);
         if (index > -1) {
-            const coneIdForUndo = coneData.id;
-            const conePropsForUndo = {
-                latlng: { lat: coneData.latlng.lat, lng: coneData.latlng.lng },
-                type: coneData.type,
-                angle: coneData.angle
-            };
-
-            this.map.removeLayer(coneData.marker);
             this.cones.splice(index, 1);
-            this.coneMarkers.splice(this.coneMarkers.indexOf(coneData.marker), 1);
-
-            const selectedIndex = this.selectedCones.findIndex(sc => sc === coneData);
-            if (selectedIndex > -1) {
-                this.selectedCones.splice(selectedIndex, 1);
+            this.map.removeLayer(coneData.marker);
+            
+            if (!isUndoRedoOperation && this.uiBridge.app.undoRedoManager) {
+                this.uiBridge.app.undoRedoManager.addAction({
+                    type: 'delete',
+                    cones: [{
+                        id: coneData.id,
+                        latlng: { lat: coneData.latlng.lat, lng: coneData.latlng.lng },
+                        type: coneData.type,
+                        angle: coneData.angle
+                    }]
+                });
             }
-            if (this.selectedCone === coneData) {
-                this.selectedCone = this.selectedCones.length > 0 ? this.selectedCones[0] : null;
-            }
-
+            
             this.redrawPath();
-            this.calculatePathLength();
-            this.uiBridge.updateConeCount(this.cones.length);
-            this.uiBridge.updateSelectedConeTools(this.selectedCones);
+        }
+    }
+    
+    _handleConeDragEnd(event, coneData) {
+        let finalPositions = [];
+        let originalPositions = [];
 
-            if (!isUndoRedoOperation && this.app.undoRedoManager) {
-                const action = {
-                    type: 'delete_cone',
-                    coneData: {
-                        id: coneIdForUndo,
-                        latlng: conePropsForUndo.latlng,
-                        type: conePropsForUndo.type,
-                        angle: conePropsForUndo.angle
-                    }
-                };
-                this.app.undoRedoManager.addAction(action);
+        this.selectedCones.forEach(sc => {
+            const finalLatLng = sc.marker.getLatLng();
+            let snappedLatLng = finalLatLng;
+            if (this.gridTool) {
+                snappedLatLng = this.gridTool.snapToGrid(finalLatLng);
+                if (snappedLatLng.lat !== finalLatLng.lat || snappedLatLng.lng !== finalLatLng.lng) {
+                    sc.marker.setLatLng(snappedLatLng);
+                }
             }
+            
+            // Store positions for undo/redo
+            finalPositions.push({
+                id: sc.id,
+                latlng: sc.marker.getLatLng()
+            });
+            
+            const originalPos = this.dragStartPositions.get(sc.id);
+            if (originalPos) {
+                originalPositions.push({
+                    id: sc.id,
+                    latlng: originalPos.latlng
+                });
+            }
+            
+            // Update internal latlng state
+            sc.latlng = sc.marker.getLatLng();
+        });
+        
+        this.dragStartPositions.clear();
+        this.redrawPath();
+        
+        // Add to undo/redo stack if it's not already an undo/redo operation
+        if (!event.undoRedoOperation && this.uiBridge.app.undoRedoManager && originalPositions.length > 0) {
+            this.uiBridge.app.undoRedoManager.addAction({
+                type: 'move',
+                originalPositions: originalPositions,
+                newPositions: finalPositions
+            });
         }
     }
 
@@ -737,7 +747,6 @@ export class ConeManager {
                 }
             });
         }
-        
         return addedCones;
     }
 
@@ -751,6 +760,221 @@ export class ConeManager {
             sumLng += cone.latlng.lng;
         });
         return L.latLng(sumLat / cones.length, sumLng / cones.length);
+    }
+    
+    // --- Box Selection Tool Methods ---
+    startBoxSelection() {
+        this.isBoxSelectionActive = true;
+        // Reset any existing selection elements
+        this.stopBoxSelectionWithoutToggle();
+        
+        // Add event listeners for box selection
+        this._boxSelectionMouseDownHandler = this._handleBoxSelectionMouseDown.bind(this);
+        this._boxSelectionMouseMoveHandler = this._handleBoxSelectionMouseMove.bind(this);
+        this._boxSelectionMouseUpHandler = this._handleBoxSelectionMouseUp.bind(this);
+        
+        this.map.on('mousedown', this._boxSelectionMouseDownHandler);
+        this.map.on('mousemove', this._handleCrosshairMove.bind(this));
+        
+        // Create crosshair element
+        this._createCrosshair();
+        
+        // Set the cursor style for the map container
+        this.map.getContainer().style.cursor = 'crosshair';
+        
+        // Store current map dragging state and disable dragging
+        this._mapDraggingWasEnabled = this.map.dragging.enabled();
+        this.map.dragging.disable();
+        
+        console.log('Box selection mode activated');
+    }
+    
+    stopBoxSelection() {
+        if (!this.isBoxSelectionActive) return;
+        
+        this.stopBoxSelectionWithoutToggle();
+        this.isBoxSelectionActive = false;
+        
+        // Reset the cursor style
+        this.map.getContainer().style.cursor = '';
+        
+        // Re-enable map dragging if it was previously enabled
+        if (this._mapDraggingWasEnabled) {
+            this.map.dragging.enable();
+        }
+        
+        console.log('Box selection mode deactivated');
+    }
+    
+    stopBoxSelectionWithoutToggle() {
+        // Remove box selection event listeners
+        if (this._boxSelectionMouseDownHandler) {
+            this.map.off('mousedown', this._boxSelectionMouseDownHandler);
+        }
+        if (this._boxSelectionMouseMoveHandler) {
+            this.map.off('mousemove', this._boxSelectionMouseMoveHandler);
+        }
+        if (this._boxSelectionMouseUpHandler) {
+            this.map.off('mouseup', this._boxSelectionMouseUpHandler);
+        }
+        
+        // Remove crosshair
+        if (this.crosshair) {
+            this.map.getContainer().removeChild(this.crosshair);
+            this.crosshair = null;
+        }
+        
+        // Remove any existing selection rectangle
+        if (this.boxSelectionRect) {
+            this.boxSelectionRect.remove();
+            this.boxSelectionRect = null;
+        }
+        
+        this.boxSelectionStart = null;
+        this.boxSelectionEnd = null;
+    }
+    
+    _createCrosshair() {
+        // Remove any existing crosshair
+        if (this.crosshair) {
+            this.map.getContainer().removeChild(this.crosshair);
+        }
+        
+        // Create crosshair container div
+        const crosshair = document.createElement('div');
+        crosshair.className = 'crosshair';
+        crosshair.style.position = 'absolute';
+        crosshair.style.pointerEvents = 'none';
+        crosshair.style.zIndex = '1000';
+        
+        // Create horizontal line
+        const hLine = document.createElement('div');
+        hLine.style.position = 'absolute';
+        hLine.style.width = '20px';
+        hLine.style.height = '2px';
+        hLine.style.backgroundColor = 'red';
+        hLine.style.top = '0px';
+        hLine.style.left = '-10px';
+        
+        // Create vertical line
+        const vLine = document.createElement('div');
+        vLine.style.position = 'absolute';
+        vLine.style.width = '2px';
+        vLine.style.height = '20px';
+        vLine.style.backgroundColor = 'red';
+        vLine.style.top = '-10px';
+        vLine.style.left = '0px';
+        
+        // Add the lines to the crosshair container
+        crosshair.appendChild(hLine);
+        crosshair.appendChild(vLine);
+        
+        // Add the crosshair to the map container
+        this.map.getContainer().appendChild(crosshair);
+        this.crosshair = crosshair;
+    }
+    
+    _handleCrosshairMove(e) {
+        if (!this.isBoxSelectionActive || !this.crosshair) return;
+        
+        // Get the mouse position relative to the map container
+        const containerPoint = this.map.mouseEventToContainerPoint(e);
+        
+        // Update crosshair position
+        this.crosshair.style.left = containerPoint.x + 'px';
+        this.crosshair.style.top = containerPoint.y + 'px';
+    }
+    
+    _handleBoxSelectionMouseDown(e) {
+        // Only start box selection if the user is drawing a box (left mouse button)
+        if (e.originalEvent.button !== 0) return;
+        
+        L.DomEvent.preventDefault(e);
+        L.DomEvent.stopPropagation(e);
+        
+        this.boxSelectionStart = e.latlng;
+        
+        // Add event listeners for mouse movement and up
+        this.map.on('mousemove', this._boxSelectionMouseMoveHandler);
+        this.map.on('mouseup', this._boxSelectionMouseUpHandler);
+    }
+    
+    _handleBoxSelectionMouseMove(e) {
+        if (!this.boxSelectionStart) return;
+        
+        this.boxSelectionEnd = e.latlng;
+        
+        // Update or create the selection rectangle
+        if (this.boxSelectionRect) {
+            this.boxSelectionRect.setBounds(L.latLngBounds(this.boxSelectionStart, this.boxSelectionEnd));
+        } else {
+            this.boxSelectionRect = L.rectangle(L.latLngBounds(this.boxSelectionStart, this.boxSelectionEnd), {
+                color: '#3388ff',
+                weight: 1,
+                opacity: 0.5,
+                fillOpacity: 0.2
+            }).addTo(this.map);
+        }
+    }
+    
+    _handleBoxSelectionMouseUp(e) {
+        if (!this.boxSelectionStart) return;
+        
+        // Prevent default behavior and stop event propagation
+        L.DomEvent.preventDefault(e);
+        L.DomEvent.stopPropagation(e);
+        
+        // Complete the box selection
+        this.boxSelectionEnd = e.latlng;
+        
+        // Select all cones within the box
+        this._selectConesInBox();
+        
+        // Remove the movement handlers
+        this.map.off('mousemove', this._boxSelectionMouseMoveHandler);
+        this.map.off('mouseup', this._boxSelectionMouseUpHandler);
+        
+        // Remove the selection rectangle
+        if (this.boxSelectionRect) {
+            this.boxSelectionRect.remove();
+            this.boxSelectionRect = null;
+        }
+        
+        this.boxSelectionStart = null;
+        this.boxSelectionEnd = null;
+        
+        // Use setTimeout to prevent any click events from being triggered afterward
+        setTimeout(() => {
+            this.isBoxSelecting = false;
+        }, 10);
+    }
+    
+    _selectConesInBox() {
+        if (!this.boxSelectionStart || !this.boxSelectionEnd) return;
+        
+        // Create a bounds object from the selection points
+        const bounds = L.latLngBounds(this.boxSelectionStart, this.boxSelectionEnd);
+        
+        // Deselect any previously selected cones
+        this.deselectAllCones(true);
+        
+        // Select all cones within the bounds
+        const selectedCones = [];
+        this.cones.forEach(cone => {
+            if (bounds.contains(cone.latlng)) {
+                selectedCones.push(cone);
+                this.toggleConeSelectionUI(cone, true);
+            }
+        });
+        
+        // Update the selection arrays
+        this.selectedCones = selectedCones;
+        this.selectedCone = this.selectedCones.length > 0 ? this.selectedCones[0] : null;
+        
+        // Update the UI
+        this.uiBridge.updateSelectedConeTools(this.selectedCones);
+        
+        console.log('Selected', this.selectedCones.length, 'cones in box');
     }
 
     _rotatePointAroundOrigin(point, origin, angleDegrees) {
