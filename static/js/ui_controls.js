@@ -334,6 +334,17 @@ export class UIControls {
     }
 
     _handleMeasureToggle() {
+        // First, activate cursor mode if not already active
+        if (this.cursorModeRadio && !this.cursorModeRadio.checked) {
+            console.log('Measure button clicked - switching to Cursor Mode');
+            this.cursorModeRadio.checked = true;
+            
+            // Manually trigger the change event to update app state
+            const changeEvent = new Event('change');
+            this.cursorModeRadio.dispatchEvent(changeEvent);
+        }
+        
+        // Then toggle measure mode
         if (this.app.measureTool && typeof this.app.measureTool.toggleMeasureMode === 'function') {
             this.app.measureTool.toggleMeasureMode();
         } else {
@@ -407,6 +418,19 @@ export class UIControls {
         const isBoxSelectionMode = mode === 'box-selection-radio';
         const isRegularMode = mode === 'regular-mode-radio';
         
+        // If we're switching away from box selection mode, clear any selected cones
+        const wasInBoxSelectionMode = this.app.state.isBoxSelectionMode;
+        if (wasInBoxSelectionMode && !isBoxSelectionMode) {
+            console.log('Switching away from selection mode - clearing selected cones');
+            if (this.app.coneManager) {
+                // Use deselectAllCones to properly clear visual selection circles
+                if (this.app.coneManager.deselectAllCones) {
+                    console.log('Deselecting all cones and clearing visual highlights');
+                    this.app.coneManager.deselectAllCones();
+                }
+            }
+        }
+        
         // Update app state
         this.app.state.isCursorMode = isCursorMode;
         this.app.state.isBoxSelectionMode = isBoxSelectionMode;
@@ -417,6 +441,12 @@ export class UIControls {
             console.log('Edit mode ON - disabling map dragging');
             map.dragging.disable();
             map.getContainer().style.cursor = 'default';
+            
+            // Stop box selection if it was active
+            if (this.app.coneManager.isBoxSelectionActive) {
+                console.log('Stopping box selection when switching to Edit Mode');
+                this.app.coneManager.stopBoxSelection();
+            }
         } else if (isCursorMode) {
             // Cursor Mode: Disable map dragging, set default cursor
             console.log('Cursor mode ON - disabling map dragging');
