@@ -23,11 +23,14 @@ export class ImportExportTool {
         const pathLengthMeters = pathLengthFeet / 3.28084;
 
         const courseData = {
-            cones: coneManager.cones.map(cone => ({
-                latlng: cone.marker.getLatLng(),
-                type: cone.data.type,
-                angle: cone.data.angle || 0
-            })),
+            cones: coneManager.cones.map(cone => {
+                console.log('Processing cone for export:', cone);
+                return {
+                    latlng: cone.marker.getLatLng(),
+                    type: cone.type,  // Access type directly on the cone object
+                    angle: cone.angle || 0  // Access angle directly on the cone object
+                };
+            }),
             mapCenter: map.getCenter(),
             mapZoom: map.getZoom(),
             gridSettings: {
