@@ -22,19 +22,58 @@ export class UndoRedoManager {
     }
 
     undo() {
-        if (this.undoStack.length === 0) {
-            // console.log('Undo stack empty.');
-            return;
+        try {
+            if (this.undoStack.length === 0) {
+                console.log('Undo stack empty.');
+                return;
+            }
+    
+            const action = this.undoStack.pop();
+            if (!action || !action.type) {
+                console.error('Invalid action in undo stack:', action);
+                this._updateUIButtons();
+                return;
+            }
+            
+            console.log('Undoing action:', action.type, action);
+            
+            // Fix action properties based on action type if needed
+            this._ensureValidActionProperties(action);
+            
+            // Perform the reverse of the action
+            this._performAction(action, true); // true for undo
+    
+            this.redoStack.push(action);
+            this._updateUIButtons();
+        } catch (error) {
+            console.error('Error in undo operation:', error);
+            this._updateUIButtons();
         }
-
-        const action = this.undoStack.pop();
-        // console.log('Undoing action:', action);
-
-        // Perform the reverse of the action
-        this._performAction(action, true); // true for undo
-
-        this.redoStack.push(action);
-        this._updateUIButtons();
+    }
+    
+    _ensureValidActionProperties(action) {
+        // Add protections for specific action types
+        switch (action.type) {
+            case 'clear_all_cones':
+                // Make sure one of the expected properties exists
+                if (!action.conesData && !action.oldConesData && !action.cones) {
+                    console.warn('Clear all cones action missing cone data, creating empty array');
+                    action.conesData = [];
+                }
+                break;
+                
+            case 'move_multiple_cones':
+                // Ensure conesMovementData exists and is an array
+                if (!action.conesMovementData || !Array.isArray(action.conesMovementData)) {
+                    console.warn('Move multiple cones action has invalid conesMovementData, creating empty array');
+                    action.conesMovementData = [];
+                }
+                break;
+                
+            // Add similar protections for other action types as needed
+        }
+        
+        return action;
     }
 
     redo() {
@@ -54,11 +93,17 @@ export class UndoRedoManager {
     }
 
     _performAction(action, isUndo) {
-        const coneManager = this.app.coneManager;
-        if (!coneManager) {
-            console.error('ConeManager not available in UndoRedoManager.');
-            return;
-        }
+        try {
+            // Log the action at the start of _performAction
+            console.log('DEBUGGING _performAction - Action type:', action.type);
+            console.log('DEBUGGING _performAction - Full action:', JSON.stringify(action));
+            console.log('DEBUGGING _performAction - Is undo operation:', isUndo);
+            
+            const coneManager = this.app.coneManager;
+            if (!coneManager) {
+                console.error('ConeManager not available in UndoRedoManager.');
+                return;
+            }
 
         switch (action.type) {
             case 'add_cone':
@@ -163,16 +208,37 @@ export class UndoRedoManager {
                 break;
             case 'move_multiple_cones':
                 // action.conesMovementData: [{ coneRef, oldLatLng, newLatLng }]
-                action.conesMovementData.forEach(moveData => {
-                    const targetCone = moveData.coneRef;
-                    if (targetCone && targetCone.marker) {
-                        const latLngToSet = isUndo ? moveData.oldLatLng : moveData.newLatLng;
-                        targetCone.marker.setLatLng(latLngToSet);
-                        targetCone.latlng = L.latLng(latLngToSet.lat, latLngToSet.lng);
+                try {
+                    if (!action.conesMovementData || !Array.isArray(action.conesMovementData)) {
+                        console.error('Invalid move_multiple_cones action: conesMovementData missing or not an array', action);
+                        break;
                     }
-                });
-                coneManager.redrawPath();
-                coneManager.calculatePathLength();
+                    
+                    action.conesMovementData.forEach(moveData => {
+                        if (!moveData || !moveData.coneRef) {
+                            console.error('Invalid move data item:', moveData);
+                            return; // Skip this item and continue with others
+                        }
+                        
+                        const targetCone = moveData.coneRef;
+                        if (targetCone && targetCone.marker) {
+                            const latLngToSet = isUndo ? moveData.oldLatLng : moveData.newLatLng;
+                            if (!latLngToSet || typeof latLngToSet.lat !== 'function') {
+                                console.error('Invalid latLng data:', latLngToSet, 'in moveData:', moveData);
+                                return; // Skip this item
+                            }
+                            
+                            targetCone.marker.setLatLng(latLngToSet);
+                            targetCone.latlng = L.latLng(latLngToSet.lat, latLngToSet.lng);
+                        }
+                    });
+                    
+                    coneManager.redrawPath();
+                    coneManager.calculatePathLength();
+                } catch (error) {
+                    console.error('Error in move_multiple_cones case:', error);
+                    console.error('Action data:', JSON.stringify(action));
+                }
                 break;
             case 'rotate_cone': // Single cone rotation
                 // action.coneRef, action.oldAngle, action.newAngle
@@ -215,8 +281,8 @@ export class UndoRedoManager {
                 console.log(`Processing clear_all_cones action:`, action);
                 
                 if (isUndo) {
-                    // Check both property names for compatibility (conesData and oldConesData)
-                    const conesArray = action.oldConesData || action.conesData;
+                    // Check all property names for compatibility (conesData and oldConesData and cones)
+                    const conesArray = action.oldConesData || action.conesData || action.cones;
                     
                     if (!conesArray || !Array.isArray(conesArray)) {
                         console.error('Missing or invalid cones data for clear_all_cones action', action);
@@ -244,6 +310,11 @@ export class UndoRedoManager {
         // After performing action, ensure UI reflects the state (e.g. selection tools)
         if (this.app.uiControls) {
             this.app.uiControls.updateSelectedConeTools(coneManager.selectedCones);
+        }
+        } catch (error) {
+            console.error('Error in _performAction:', error);
+            console.error('Action that caused error:', action ? JSON.stringify(action) : 'undefined');
+            console.error('Error stack trace:', error.stack);
         }
     }
 
