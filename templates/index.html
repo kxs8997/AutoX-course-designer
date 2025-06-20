@@ -13,6 +13,19 @@
      crossorigin=""></script>
     <script src="{{ url_for('static', filename='js/leaflet.rotatedMarker.min.js') }}"></script>
     <!-- <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1000, 9999) | random }}" defer></script> -->
+    <!-- Add specific cache busting for drawing_tools.js -->
+    <script>
+        // Force reload of drawing_tools.js by adding random query parameter
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Forcing reload of drawing_tools.js');
+            // This will be executed after all scripts load
+            setTimeout(() => {
+                if (window.drawingToolsFixApplied !== true) {
+                    console.warn('Drawing tools color fix not detected, check console for errors');
+                }
+            }, 1000);
+        });
+    </script>
     <script type="module" src="{{ url_for('static', filename='js/main_app.js') }}?v={{ range(1000, 9999) | random }}" defer></script>
 </head>
 <body>
@@ -37,6 +50,11 @@
             <label><input type="radio" name="interaction-mode" id="regular-mode-radio"> Edit Mode</label><br>
             <label><input type="radio" name="interaction-mode" id="cursor-mode-radio" checked> Cursor Mode</label><br>
             <label><input type="radio" name="interaction-mode" id="box-selection-radio"> Selection Tool</label><br>
+            <label><input type="radio" name="interaction-mode" id="line-tool-radio"> Line Tool</label><br>
+            <div id="line-color-picker" style="margin-left: 20px; margin-bottom: 10px; display: none;">
+                <label for="line-color">Line Color: </label>
+                <input type="color" id="line-color" value="#ff0000">
+            </div>
             <label style="display: none;"><input type="checkbox" id="selection-mode-checkbox"> Selection Mode</label>
 
             <label><input type="checkbox" id="snap-to-grid-checkbox"> Snap to Grid</label><br>

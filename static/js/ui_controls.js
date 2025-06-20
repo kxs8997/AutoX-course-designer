@@ -11,6 +11,7 @@ export class UIControls {
         this.regularModeRadio = document.getElementById('regular-mode-radio');
         this.cursorModeRadio = document.getElementById('cursor-mode-radio');
         this.boxSelectionRadio = document.getElementById('box-selection-radio');
+        this.lineToolRadio = document.getElementById('line-tool-radio');
         this.selectionModeCheckbox = document.getElementById('selection-mode-checkbox');
         
         // Cone type radios
@@ -55,9 +56,14 @@ export class UIControls {
         this.exportJsonBtn = document.getElementById('export-json-btn');
         this.importJsonBtn = document.getElementById('import-json-btn');
         this.coneTypeRadios = document.querySelectorAll('input[name="coneType"]');
+        
+        // Line Tool UI
+        this.lineColorPicker = document.getElementById('line-color-picker');
+        this.lineColorInput = document.getElementById('line-color');
 
         // Bind event handlers
         this._handleUndo = this._handleUndo.bind(this);
+        this._handleLineToolChange = this._handleLineToolChange.bind(this);
         this._handleRedo = this._handleRedo.bind(this); // Added Redo handler binding
         this._handleClearAll = this._handleClearAll.bind(this);
         this._handleSnapToggle = this._handleSnapToggle.bind(this);
@@ -114,6 +120,7 @@ export class UIControls {
         this._handleConfirmPaste = this._handleConfirmPaste.bind(this);
         this._handleCancelPaste = this._handleCancelPaste.bind(this);
         this._handlePasteRotationChange = this._handlePasteRotationChange.bind(this);
+        this._handleLineColorChange = this._handleLineColorChange.bind(this);
 
         this._initEventListeners();
         console.log('UIControls initialized');
@@ -157,6 +164,11 @@ export class UIControls {
             this.boxSelectionRadio.addEventListener('change', this._handleModeChange);
         }
         
+        if (this.lineToolRadio) {
+            this.lineToolRadio.addEventListener('change', this._handleLineToolChange);
+            console.log('Line tool radio listener added');
+        }
+        
         // Grid related event listeners
         if (this.snapCheckbox) {
             this.snapCheckbox.addEventListener('change', this._handleSnapToggle);
@@ -182,6 +194,11 @@ export class UIControls {
         
         if (this.importJsonBtn) {
             this.importJsonBtn.addEventListener('click', this._handleImportJson);
+        }
+        
+        // Line color picker
+        if (this.lineColorInput) {
+            this.lineColorInput.addEventListener('input', this._handleLineColorChange);
         }
         
         // Key event listeners for map panning
@@ -331,6 +348,7 @@ export class UIControls {
         if (this.regularModeRadio) this.regularModeRadio.addEventListener('change', this._handleModeChange);
         if (this.cursorModeRadio) this.cursorModeRadio.addEventListener('change', this._handleModeChange);
         if (this.boxSelectionRadio) this.boxSelectionRadio.addEventListener('change', this._handleModeChange);
+        if (this.lineToolRadio) this.lineToolRadio.addEventListener('change', this._handleLineToolChange);
         
         // Cone type radios
         this._handleConeTypeChange = this._handleConeTypeChange.bind(this);
@@ -446,6 +464,54 @@ export class UIControls {
         }
     }
 
+    _handleLineToolChange(e) {
+        console.log('Line tool changed:', e.target.checked);
+        
+        if (!this.app.drawingTools) {
+            console.error('Drawing tools not initialized');
+            return;
+        }
+        
+        // Update the line tool state in the drawing tools
+        this.app.drawingTools.setLineToolActive(e.target.checked);
+        
+        if (e.target.checked) {
+            // Make sure other incompatible modes are turned off
+            if (this.regularModeRadio.checked) this.regularModeRadio.checked = false;
+            if (this.boxSelectionRadio.checked) this.boxSelectionRadio.checked = false;
+            
+            // Set the app state
+            this.app.state.isLineToolActive = true;
+            
+            // Change the cursor to indicate line tool mode
+            if (this.app.coneManager && this.app.coneManager.map) {
+                this.app.coneManager.map.getContainer().style.cursor = 'crosshair';
+            }
+            
+            // Show the color picker
+            if (this.lineColorPicker) {
+                this.lineColorPicker.style.display = 'block';
+            }
+            
+            console.log('Line tool activated');
+        } else {
+            // Reset app state
+            this.app.state.isLineToolActive = false;
+            
+            // Hide the color picker
+            if (this.lineColorPicker) {
+                this.lineColorPicker.style.display = 'none';
+            }
+            
+            // Reset the cursor
+            if (this.app.coneManager && this.app.coneManager.map) {
+                this.app.coneManager.map.getContainer().style.cursor = 'default';
+            }
+            
+            console.log('Line tool deactivated');
+        }
+    }
+
     _handleConeRotationSliderMouseDownTouchStart(event) {
         if (this.app.coneManager && this.app.coneManager.selectedCones.length > 1) {
             this.app.coneManager.startSelectedConesRotation();
@@ -498,6 +564,26 @@ export class UIControls {
             console.log('Cone type changed to:', selectedType, 'Current state:', this.app.state);
         }
     }
+    
+    _handleLineColorChange(event) {
+        if (!this.app.drawingTools) {
+            console.error('Drawing tools not initialized');
+            return;
+        }
+        
+        // Get the selected color value
+        const newColor = event.target.value;
+        console.log('Line color changed to:', newColor);
+        
+        // Update the line color using the setter method
+        this.app.drawingTools.setLineColor(newColor);
+        
+        // This will affect new lines, existing lines keep their color
+        console.log('Updated line color in drawing tools. New value:', this.app.drawingTools.lineColor);
+        
+        // DEBUG: Force console to show the actual object
+        console.dir(this.app.drawingTools);
+    }
 
     _handleModeChange(event) {
         if (!this.app.state || !this.app.coneManager || !this.app.coneManager.map) return;
@@ -523,6 +609,20 @@ export class UIControls {
                     this.app.coneManager.deselectAllCones();
                 }
             }
+        }
+        
+        // Deactivate line tool when switching to any other mode
+        if (this.lineToolRadio && this.lineToolRadio.checked && mode !== 'line-tool-radio') {
+            console.log('Deactivating line tool when switching to another mode');
+            this.lineToolRadio.checked = false;
+            
+            // Manually trigger line tool deactivation
+            if (this.app.drawingTools) {
+                this.app.drawingTools.setLineToolActive(false);
+            }
+            
+            // Update app state
+            this.app.state.isLineToolActive = false;
         }
         
         // Update app state

@@ -13,7 +13,7 @@ export function initializeMap() {
 
     // Add Google Satellite Layer
     L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
-        maxZoom: 20,
+        maxZoom: 22,
         subdomains:['mt0','mt1','mt2','mt3'],
         attribution: 'Map data &copy; Google'
     }).addTo(map);

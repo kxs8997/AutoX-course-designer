@@ -155,8 +155,16 @@ export class ConeManager {
             return;
         }
         
-        console.log(`Cone clicked. ID: ${coneData.id}, Selection Mode: ${this.app.state.isSelectionMode}`);
-
+        console.log(`Cone clicked. ID: ${coneData.id}, Selection Mode: ${this.app.state.isSelectionMode}, Line Tool: ${this.app.state.isLineToolActive}`);
+        
+        // Handle line tool first if it's active
+        if (this.app.state.isLineToolActive && this.app.drawingTools) {
+            console.log('Line tool is active, handling cone selection for line drawing');
+            this.app.drawingTools.handleConeClick(coneData);
+            return;
+        }
+        
+        // Standard selection behavior
         if (this.app.state.isSelectionMode) {
             this.toggleConeSelection(coneData);
         } else {

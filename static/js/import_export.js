@@ -28,7 +28,8 @@ export class ImportExportTool {
                 return {
                     latlng: cone.marker.getLatLng(),
                     type: cone.type,  // Access type directly on the cone object
-                    angle: cone.angle || 0  // Access angle directly on the cone object
+                    angle: cone.angle || 0,  // Access angle directly on the cone object
+                    id: cone.id // Include cone ID for line references
                 };
             }),
             mapCenter: map.getCenter(),
@@ -42,7 +43,18 @@ export class ImportExportTool {
             stats: {
                 coneCount: coneManager.cones.length,
                 pathLength: pathLengthMeters
-            }
+            },
+            // Export lines if any exist
+            lines: this.app.drawingTools && this.app.drawingTools.getLines ? 
+                this.app.drawingTools.getLines().map(line => {
+                    console.log('Processing line for export:', line);
+                    return {
+                        startConeId: line.startCone ? line.startCone.id : null,
+                        endConeId: line.endCone ? line.endCone.id : null,
+                        color: line.color || '#ff0000',
+                        id: line.id
+                    };
+                }) : []
         };
         
         const jsonData = JSON.stringify(courseData, null, 2);
@@ -100,13 +112,47 @@ export class ImportExportTool {
                 }
                 
                 if (courseData.gridSettings) {
-                    uiControls.snapCheckbox.checked = courseData.gridSettings.enabled;
-                    uiControls.gridSizeInput.value = courseData.gridSettings.size;
-                    uiControls.gridRotationInput.value = courseData.gridSettings.rotation;
+                    uiControls.snapCheckbox.checked = courseData.gridSettings.enabled || false;
+                    uiControls.gridSizeInput.value = courseData.gridSettings.size || 1.0;
+                    uiControls.gridRotationInput.value = courseData.gridSettings.rotation || 0;
                     if (uiControls.gridRotationValueDisplay) {
                         uiControls.gridRotationValueDisplay.textContent = courseData.gridSettings.rotation;
                     }
                     gridTool.drawGrid();
+                }
+                
+                // Import lines if present in the course data
+                if (courseData.lines && this.app.drawingTools) {
+                    console.log('Importing lines from course data:', courseData.lines);
+                    // Clear any existing lines
+                    this.app.drawingTools.clearAllLines();
+                    
+                    // We need to rebuild the lines after all cones are placed
+                    // Wait a short time to ensure all cones are fully loaded and indexed
+                    setTimeout(() => {
+                        courseData.lines.forEach(lineData => {
+                            try {
+                                // Find the referenced cones by their IDs
+                                const startCone = coneManager.findConeById(lineData.startConeId);
+                                const endCone = coneManager.findConeById(lineData.endConeId);
+                                 
+                                if (startCone && endCone) {
+                                    // Create the line between these cones
+                                    this.app.drawingTools.createLineBetweenCones(
+                                        startCone, 
+                                        endCone, 
+                                        lineData.color || '#ff0000',
+                                        lineData.id
+                                    );
+                                    console.log(`Line created between cones ${lineData.startConeId} and ${lineData.endConeId}`);
+                                } else {
+                                    console.warn(`Could not create line: cone(s) not found - start: ${lineData.startConeId}, end: ${lineData.endConeId}`);
+                                }
+                            } catch (err) {
+                                console.error('Error creating line from import data:', err);
+                            }
+                        });
+                    }, 200); // Short delay to ensure cones are loaded
                 }
                 
                 if (courseData.cones && Array.isArray(courseData.cones)) {

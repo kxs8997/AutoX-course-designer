@@ -6,6 +6,7 @@ import { ConeManager } from './cone_manager.js';
 import { UIControls } from './ui_controls.js';
 import { GridTool } from './grid_tool.js';
 import { MeasureTool } from './measure_tool.js';
+import { DrawingTools } from './drawing_tools.js';
 import { ImportExportTool } from './import_export.js';
 import { ClipboardManager } from './clipboard.js';
 import { UndoRedoManager } from './undo_redo.js';
@@ -35,6 +36,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const undoRedoManager = new UndoRedoManager(tempAppInstance);
     // ConeManager is special since it depends on other tools being in the app instance
     const coneManager = new ConeManager(tempAppInstance, uiControls, gridTool);
+    // Initialize DrawingTools for line drawing between cones
+    const drawingTools = new DrawingTools(tempAppInstance);
 
     // Now create the final, complete app instance
     const appInstance = {
@@ -45,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
         uiControls: uiControls,
         gridTool: gridTool,
         measureTool: measureTool,
+        drawingTools: drawingTools,
         importExportTool: importExportTool,
         clipboardManager: clipboardManager,
         undoRedoManager: undoRedoManager,
