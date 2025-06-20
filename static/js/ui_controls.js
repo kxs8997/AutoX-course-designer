@@ -104,6 +104,76 @@ export class UIControls {
         this._initEventListeners();
         console.log('UIControls initialized');
     }
+    
+    _initEventListeners() {
+        // Add event listeners for general buttons
+        if (this.undoBtn) {
+            this.undoBtn.addEventListener('click', this._handleUndo);
+            console.log('Undo button listener added');
+        }
+        
+        if (this.redoBtn) {
+            this.redoBtn.addEventListener('click', this._handleRedo);
+            console.log('Redo button listener added');
+        }
+        
+        if (this.clearBtn) {
+            this.clearBtn.addEventListener('click', this._handleClearAll);
+            console.log('Clear all button listener added');
+        }
+        
+        // Add event listeners for cone type radios
+        if (this.coneTypeRadios) {
+            this.coneTypeRadios.forEach(radio => {
+                radio.addEventListener('change', this._handleConeTypeChange);
+            });
+            console.log('Cone type radio listeners added');
+        }
+        
+        // Add event listeners for mode radios
+        if (this.regularModeRadio) {
+            this.regularModeRadio.addEventListener('change', this._handleModeChange);
+        }
+        
+        if (this.cursorModeRadio) {
+            this.cursorModeRadio.addEventListener('change', this._handleModeChange);
+        }
+        
+        if (this.boxSelectionRadio) {
+            this.boxSelectionRadio.addEventListener('change', this._handleModeChange);
+        }
+        
+        // Grid related event listeners
+        if (this.snapCheckbox) {
+            this.snapCheckbox.addEventListener('change', this._handleSnapToggle);
+        }
+        
+        if (this.gridSizeInput) {
+            this.gridSizeInput.addEventListener('change', this._handleGridSizeChange);
+        }
+        
+        if (this.gridRotationInput) {
+            this.gridRotationInput.addEventListener('input', this._handleGridRotationChange);
+        }
+        
+        // Measure button
+        if (this.measureBtn) {
+            this.measureBtn.addEventListener('click', this._handleMeasureToggle);
+        }
+        
+        // Import/Export buttons
+        if (this.exportJsonBtn) {
+            this.exportJsonBtn.addEventListener('click', this._handleExportJson);
+        }
+        
+        if (this.importJsonBtn) {
+            this.importJsonBtn.addEventListener('click', this._handleImportJson);
+        }
+        
+        // Key event listeners for map panning
+        document.addEventListener('keydown', this._handleKeyDown.bind(this));
+        document.addEventListener('keyup', this._handleKeyUp.bind(this));
+    }
 
     _createContextMenu() {
         const menu = document.createElement('div');

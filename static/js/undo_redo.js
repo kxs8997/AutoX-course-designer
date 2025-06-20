@@ -75,18 +75,64 @@ export class UndoRedoManager {
                     coneManager.addCone(action.coneData.latlng, action.coneData.type, action.coneData.angle, true, action.coneData); // true for isImport/isRedo, pass original coneData
                 }
                 break;
-            case 'delete_cone':
-                // action.coneData should be the cone that was deleted { latlng, type, angle, originalRef (optional) }
-                if (isUndo) {
-                    // To undo 'delete_cone', we re-add the cone.
-                    coneManager.addCone(action.coneData.latlng, action.coneData.type, action.coneData.angle, true, action.coneData.originalRef || action.coneData); // true for isImport/isRedo
-                } else {
-                    // To redo 'delete_cone', we delete it again.
-                    // Need a way to find the cone if it was re-added. Using originalRef if available.
-                    const coneToRedelete = action.coneData.originalRef || coneManager.findConeByProperties(action.coneData);
-                    if (coneToRedelete) {
-                        coneManager.deleteConeData(coneToRedelete, true);
+            case 'delete': // Single cone deletion
+            case 'delete_cone': // For compatibility with both naming conventions
+                console.log(`Processing ${action.type} action:`, action);
+                
+                // The action could have either coneData (old format) or cones array (new format)
+                if (action.coneData) {
+                    // Old format: Single cone in coneData property
+                    if (isUndo) {
+                        console.log(`Undoing ${action.type} action for cone:`, action.coneData);
+                        
+                        // Extra safety checks for required properties
+                        if (!action.coneData.latlng || !action.coneData.type) {
+                            console.error('Missing required cone properties for undo', action.coneData);
+                            break;
+                        }
+                        
+                        const angle = action.coneData.angle || 0; // Default to 0 if angle is missing
+                        coneManager.addCone(action.coneData.latlng, action.coneData.type, angle, true, action.coneData.originalRef || action.coneData); // true for isImport/isRedo
+                    } else {
+                        // To redo 'delete' or 'delete_cone', we delete it again.
+                        const coneToRedelete = action.coneData.originalRef || coneManager.findConeByProperties(action.coneData);
+                        if (coneToRedelete) {
+                            console.log(`Redoing ${action.type} action for cone:`, coneToRedelete);
+                            coneManager.deleteConeData(coneToRedelete, true);
+                        } else {
+                            console.warn(`Could not find cone to re-delete`, action.coneData);
+                        }
                     }
+                } 
+                else if (action.cones && action.cones.length > 0) {
+                    // New format: Array of cones in cones property
+                    console.log(`Processing ${action.type} with ${action.cones.length} cones`);
+                    
+                    if (isUndo) {
+                        // Recreate all the deleted cones
+                        action.cones.forEach(cone => {
+                            console.log('Restoring deleted cone:', cone);
+                            if (cone.latlng && cone.type) {
+                                const angle = cone.angle || 0;
+                                coneManager.addCone(cone.latlng, cone.type, angle, true, cone);
+                            } else {
+                                console.error('Cone missing required properties:', cone);
+                            }
+                        });
+                    } else {
+                        // Re-delete all the cones
+                        action.cones.forEach(cone => {
+                            const coneToRedelete = coneManager.findConeByProperties(cone);
+                            if (coneToRedelete) {
+                                coneManager.deleteConeData(coneToRedelete, true);
+                            } else {
+                                console.warn('Could not find cone to re-delete', cone);
+                            }
+                        });
+                    }
+                } 
+                else {
+                    console.error(`Invalid ${action.type} action format - missing both coneData and cones`, action);
                 }
                 break;
             case 'delete_multiple_cones':
@@ -166,13 +212,29 @@ export class UndoRedoManager {
                 break;
             // Add more action types as needed (e.g., clear_all_cones)
             case 'clear_all_cones':
-                // action.oldConesData: array of all cone data that were cleared
+                console.log(`Processing clear_all_cones action:`, action);
+                
                 if (isUndo) {
-                    action.oldConesData.forEach(coneData => {
-                        coneManager.addCone(coneData.latlng, coneData.type, coneData.angle, true, coneData.originalRef || coneData);
+                    // Check both property names for compatibility (conesData and oldConesData)
+                    const conesArray = action.oldConesData || action.conesData;
+                    
+                    if (!conesArray || !Array.isArray(conesArray)) {
+                        console.error('Missing or invalid cones data for clear_all_cones action', action);
+                        break;
+                    }
+                    
+                    console.log(`Restoring ${conesArray.length} cones from clear all`);
+                    conesArray.forEach(coneData => {
+                        if (coneData && coneData.latlng && coneData.type) {
+                            const angle = coneData.angle || 0;
+                            coneManager.addCone(coneData.latlng, coneData.type, angle, true, coneData.originalRef || coneData);
+                        } else {
+                            console.error('Invalid cone data in cones array', coneData);
+                        }
                     });
                 }
                 else { // Redo clear all
+                    console.log('Redoing clear all');
                     coneManager.clearAllCones(true); // true to skip adding to undo stack
                 }
                 break;
