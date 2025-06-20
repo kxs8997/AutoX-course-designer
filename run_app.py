@@ -7,7 +7,7 @@ import os
 def open_browser():
     """Open the web browser after giving the server a moment to start."""
     time.sleep(1.5)  # Wait a bit for the server to start
-    webbrowser.open('http://127.0.0.1:5000')
+    webbrowser.open('http://127.0.0.1:5001')
 
 if __name__ == '__main__':
     # Get the absolute path of the current script
@@ -18,4 +18,4 @@ if __name__ == '__main__':
     threading.Thread(target=open_browser).start()
     
     # Run the Flask app
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    app.run(host='127.0.0.1', port=5001, debug=False)

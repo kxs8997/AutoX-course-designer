@@ -1,7 +1,18 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from geopy.geocoders import Nominatim
+import os
 
 app = Flask(__name__)
+
+# Add cache prevention for static files during development
+@app.after_request
+def add_header(response):
+    # Prevent caching of JavaScript files
+    if response.headers.get('Content-Type') and 'javascript' in response.headers.get('Content-Type'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 @app.route('/')
 def index():

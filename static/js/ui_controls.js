@@ -67,6 +67,20 @@ export class UIControls {
         if (this.app.state) {
             this.app.state.isCursorMode = this.cursorModeRadio && this.cursorModeRadio.checked;
             this.app.state.isBoxSelectionMode = this.boxSelectionRadio && this.boxSelectionRadio.checked;
+            
+            // Properly initialize the mode functionality based on which radio is checked
+            this._handleModeChange = this._handleModeChange.bind(this);
+            if (this.cursorModeRadio && this.cursorModeRadio.checked) {
+                // Simulate a change event to properly initialize cursor mode
+                const event = { target: { id: 'cursor-mode-radio' } };
+                this._handleModeChange(event);
+            } else if (this.boxSelectionRadio && this.boxSelectionRadio.checked) {
+                const event = { target: { id: 'box-selection-radio' } };
+                this._handleModeChange(event);
+            } else if (this.regularModeRadio && this.regularModeRadio.checked) {
+                const event = { target: { id: 'regular-mode-radio' } };
+                this._handleModeChange(event);
+            }
         }
         
         // Add event listener for DOMContentLoaded to ensure map exists
