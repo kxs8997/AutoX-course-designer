@@ -281,6 +281,16 @@ export class UIControls {
             this.pasteRotationSlider.addEventListener('input', this._handlePasteRotationChange);
             console.log('Paste rotation slider listener added');
         }
+        
+        // Add cone rotation slider event listeners
+        if (this.coneRotationSlider) {
+            this.coneRotationSlider.addEventListener('input', this._handleConeRotationSliderInput);
+            this.coneRotationSlider.addEventListener('mousedown', this._handleConeRotationSliderMouseDownTouchStart);
+            this.coneRotationSlider.addEventListener('touchstart', this._handleConeRotationSliderMouseDownTouchStart);
+            this.coneRotationSlider.addEventListener('mouseup', this._handleConeRotationSliderMouseUpTouchEnd);
+            this.coneRotationSlider.addEventListener('touchend', this._handleConeRotationSliderMouseUpTouchEnd);
+            console.log('Cone rotation slider listeners added');
+        }
     }
 
     // --- Event Handlers ---
