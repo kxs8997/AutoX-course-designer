@@ -21,9 +21,7 @@ function initializeOldMainLogic(map, icons, coneManager, uiControls) {
     // Context menu is now managed by UIControls.js
 
     // --- DOM Elements (Many are now managed by UIControls.js) ---
-    // Retain elements needed for logic still in main.js (e.g., grid, measure, import/export, venue search)
-    const searchBtn = document.getElementById('venue-search-btn'); // For map_setup or future search module
-    const searchInput = document.getElementById('venue-search'); // For map_setup or future search module
+    // Most elements are now managed by specialized modules
     
     // Grid related DOM elements are now managed by UIControls and GridTool.
 
@@ -82,32 +80,7 @@ function initializeOldMainLogic(map, icons, coneManager, uiControls) {
 
     // Mousemove listener for tempMeasureLine has been removed as it's part of MeasureTool now.
 
-    searchBtn.addEventListener('click', async () => {
-        const address = searchInput.value;
-        if (!address) return;
-
-        try {
-            const response = await fetch('/search_venue', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ address: address }),
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                alert(`Venue found: ${data.address}\nLat: ${data.latitude}, Lon: ${data.longitude}`);
-                map.setView([data.latitude, data.longitude], 18);
-            } else {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (error) {
-            console.error('Search failed:', error);
-            alert('An error occurred while searching for the venue.');
-        }
-    });
+    // Venue selection is now handled by map_setup.js
 } // Closing brace for initializeOldMainLogic
 
 window.initializeOldMainLogic = initializeOldMainLogic;
