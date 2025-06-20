@@ -1,5 +1,5 @@
 // static/js/drawing_tools.js: Manages drawing permanent lines between cones
-console.log('drawing_tools.js loaded - MAJOR COLOR FIX v2');
+console.log('drawing_tools.js loaded');
 
 export class DrawingTools {
     constructor(appInstance) {
@@ -101,59 +101,35 @@ export class DrawingTools {
     }
     
     _createLine(startCone, endCone) {
-        // DEBUGGING VERSION WITH ALERTS
-        console.log('**** DEBUGGING VERSION WITH ALERTS ****');
-        
-        // Show debug alert for line creation start
-        alert('DEBUG: Line creation started');
-        
         if (!startCone || !endCone) {
             console.error('Cannot create line: missing endpoint');
             return;
         }
         
-        // Force color selection check
-        let userSelectedColor;
+        console.log(`Creating line from cone ${startCone.id} to cone ${endCone.id}`);
         
-        // Try to get the color from the picker if available
-        // The HTML uses id="line-color" not "lineColorPicker"
+        // Get the color from the color picker or use the stored color
+        let lineColor;
         const colorPicker = document.getElementById('line-color');
         
-        // Display color picker info
-        if (colorPicker) {
-            alert(`Color picker found: value = ${colorPicker.value}`);
-        } else {
-            alert('Color picker NOT FOUND');
-        }
-        
         if (colorPicker && colorPicker.value) {
-            userSelectedColor = colorPicker.value;
-            console.log(`Found color picker with value: ${userSelectedColor}`);
+            lineColor = colorPicker.value;
         } else {
             // Fall back to the stored color
-            userSelectedColor = this._lineColor || '#ff0000';
-            console.log(`Using stored color: ${userSelectedColor}`);
+            lineColor = this._lineColor || '#ff0000';
         }
-        
-        // Log the color we're using
-        alert(`LINE COLOR WILL BE: ${userSelectedColor}`);
         
         // Create line on map using the determined color
         const line = L.polyline(
             [startCone.marker.getLatLng(), endCone.marker.getLatLng()], 
             {
-                color: userSelectedColor,
+                color: lineColor,
                 weight: this.lineWeight,
                 opacity: this.lineOpacity,
                 interactive: true,
                 className: 'autox-line'
             }
         ).addTo(this.lineLayer);
-        
-        // Verify line color after creation
-        setTimeout(() => {
-            alert(`Actual line color: ${line.options.color}`);
-        }, 100);
         
         // Store line data - create this before the click handler so it's in scope
         const lineData = {
