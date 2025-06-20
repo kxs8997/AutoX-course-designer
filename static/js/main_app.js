@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // State object that will be shared across modules
     const appState = {
-        isCursorMode: false,
+        isCursorMode: true, // Default to cursor mode ON
         isSelectionMode: false,
         isMeasuringMode: false,
         selectedConeType: 'regular_cone',
