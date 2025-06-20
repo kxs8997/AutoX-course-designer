@@ -1,4 +1,11 @@
 body, html {
+
+.selected-cone {
+    outline: 3px solid #0078FF; /* Bright blue outline */
+    outline-offset: 2px;
+    border-radius: 50%; /* Make the outline circular */
+    box-shadow: 0 0 10px #0078FF; /* Add a glow effect */
+}
     margin: 0;
     padding: 0;
     height: 100%;
